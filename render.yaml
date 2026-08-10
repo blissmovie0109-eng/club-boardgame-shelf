@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: club-boardgame-shelf
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 60 app:app
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: CLUB_NAME
+        value: "우리 동아리 아지트 보드게임"
+      - key: SITE_TAGLINE
+        value: "오늘 아지트에서 무슨 게임 할까요?"
