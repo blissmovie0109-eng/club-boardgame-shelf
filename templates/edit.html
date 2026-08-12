@@ -1,3 +1,40 @@
 {% extends "base.html" %}
 {% block title %}게임 수정 · {{ club_name }}{% endblock %}
-{% block content %}<main class="wrap narrow panel-page"><a href="{{url_for('admin')}}" class="back">← 관리자</a><section class="panel"><h1>{{game.title}} 수정</h1><form method="post" class="edit-grid"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><label>게임명<input name="title" value="{{game.title}}" required></label><label>보유 장소<input name="location" value="{{game.location or default_location}}" placeholder="아지트" required></label><label>영문/부제<input name="subtitle" value="{{game.subtitle or ''}}"></label><label>카테고리<input name="category" value="{{game.category or ''}}"></label><label class="wide">이미지 URL<input name="image_url" type="url" value="{{game.image_url or ''}}"></label><label class="wide">설명 영상 URL<input name="video_url" type="url" value="{{game.video_url or ''}}" placeholder="https://www.youtube.com/..."></label><label class="wide">룰북·자료 URL<input name="material_url" type="url" value="{{game.material_url or ''}}" placeholder="https://..."></label><label>출시연도<input name="year" type="number" min="1900" max="2100" value="{{game.year or ''}}"></label><label>난이도(웨이트)<input name="difficulty" type="number" min="0" max="5" step="0.01" value="{{game.difficulty or ''}}"></label><label>최소 인원<input name="min_players" type="number" min="1" value="{{game.min_players or ''}}"></label><label>최대 인원<input name="max_players" type="number" min="1" value="{{game.max_players or ''}}"></label><label>최소 시간(분)<input name="min_time" type="number" min="1" value="{{game.min_time or ''}}"></label><label>최대 시간(분)<input name="max_time" type="number" min="1" value="{{game.max_time or ''}}"></label><label>평점<input name="rating" type="number" min="0" max="10" step="0.1" value="{{game.rating or ''}}"></label><label>베스트 인원<input name="best_players" value="{{game.best_players or ''}}"></label><label>추천 인원<input name="recommended_players" value="{{game.recommended_players or ''}}"></label><label>연령<input name="age" value="{{game.age or ''}}"></label><label class="wide">게임 설명<textarea name="description" rows="5">{{game.description or ''}}</textarea></label><button class="primary wide">저장</button></form></section></main>{% endblock %}
+{% block content %}
+<main class="wrap narrow panel-page">
+  <a href="{{url_for('admin')}}" class="back">← 관리자</a>
+  <section class="panel">
+    <h1>{{game.title}} 수정</h1>
+    <form method="post" class="edit-grid">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label>게임명<input name="title" value="{{game.title}}" required></label>
+      <label>보유 장소<input name="location" value="{{game.location or default_location}}" placeholder="아지트" required></label>
+      <label>게임 종류
+        <select name="game_type">
+          <option value="base" {% if not game.game_type or game.game_type == 'base' %}selected{% endif %}>본판</option>
+          <option value="expansion" {% if game.game_type == 'expansion' %}selected{% endif %}>확장 — 랜덤 추천 제외</option>
+          <option value="standalone_expansion" {% if game.game_type == 'standalone_expansion' %}selected{% endif %}>독립형 확장 — 랜덤 추천 포함</option>
+        </select>
+      </label>
+      <label>본판 게임명<input name="parent_title" value="{{game.parent_title or ''}}" placeholder="확장일 때 입력"></label>
+      <label>영문/부제<input name="subtitle" value="{{game.subtitle or ''}}"></label>
+      <label>카테고리<input name="category" value="{{game.category or ''}}" list="categoryOptions"><datalist id="categoryOptions"><option value="전략"><option value="추상"><option value="컬렉터블"><option value="가족"><option value="어린이"><option value="파티"><option value="테마"><option value="워게임"><option value="머더미스터리"></datalist></label>
+      <label class="wide">이미지 URL<input name="image_url" type="url" value="{{game.image_url or ''}}"></label>
+      <label class="wide">설명 영상 URL<input name="video_url" type="url" value="{{game.video_url or ''}}" placeholder="https://www.youtube.com/..."></label>
+      <label class="wide">룰북·자료 URL<input name="material_url" type="url" value="{{game.material_url or ''}}" placeholder="https://..."></label>
+      <label>출시연도<input name="year" type="number" min="1900" max="2100" value="{{game.year or ''}}"></label>
+      <label>난이도(웨이트)<input name="difficulty" type="number" min="0" max="5" step="0.01" value="{{game.difficulty or ''}}"></label>
+      <label>최소 인원<input name="min_players" type="number" min="1" value="{{game.min_players or ''}}"></label>
+      <label>최대 인원<input name="max_players" type="number" min="1" value="{{game.max_players or ''}}"></label>
+      <label>최소 시간(분)<input name="min_time" type="number" min="1" value="{{game.min_time or ''}}"></label>
+      <label>최대 시간(분)<input name="max_time" type="number" min="1" value="{{game.max_time or ''}}"></label>
+      <label>평점<input name="rating" type="number" min="0" max="10" step="0.1" value="{{game.rating or ''}}"></label>
+      <label>베스트 인원<input name="best_players" value="{{game.best_players or ''}}"></label>
+      <label>추천 인원<input name="recommended_players" value="{{game.recommended_players or ''}}"></label>
+      <label>연령<input name="age" value="{{game.age or ''}}"></label>
+      <label class="wide">게임 설명<textarea name="description" rows="5">{{game.description or ''}}</textarea></label>
+      <button class="primary wide">저장</button>
+    </form>
+  </section>
+</main>
+{% endblock %}
