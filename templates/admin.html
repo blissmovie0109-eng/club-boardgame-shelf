@@ -1,3 +1,190 @@
 {% extends "base.html" %}
 {% block title %}게임 관리 · {{ club_name }}{% endblock %}
-{% block content %}<main class="wrap panel-page"><div class="topline"><a href="{{url_for('index')}}" class="back">← 공개 목록</a><a href="{{url_for('admin_logout')}}">로그아웃</a></div><section class="panel"><div class="section-heading"><div><h1>BoardLife에서 게임 추가</h1><p>게임 상세 주소와 보유 장소를 입력하면 컬렉션에 추가됩니다.</p></div><a class="button" href="{{url_for('new_game')}}">+ 직접 추가</a></div><form method="post" class="import-form"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="url" name="url" placeholder="https://boardlife.co.kr/game/20251" required><input type="text" name="location" value="{{ default_location }}" placeholder="보유 장소" required><button class="primary">정보 불러와 추가</button></form><p class="hint">예: 아지트, 창고, 동아리방. BoardLife 자동 가져오기가 실패하면 직접 추가를 이용하세요.</p></section><section class="panel"><h2>등록 게임 {{games|length}}개</h2><div class="admin-list">{% for g in games %}<div class="admin-item">{% if g.image_url %}<img src="{{g.image_url}}" alt="">{% else %}<div class="mini-placeholder">🎲</div>{% endif %}<div class="grow"><b>{{g.title}}</b><small>{{g.min_players or '?'}}–{{g.max_players or '?'}}명 · {{g.min_time or '?'}}–{{g.max_time or '?'}}분 · 📍 {{g.location or '미지정'}}</small></div><a class="button" href="{{url_for('edit_game', game_id=g.id)}}">수정</a><form method="post" action="{{url_for('delete_game', game_id=g.id)}}" onsubmit="return confirm('삭제할까요?')"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="danger">삭제</button></form></div>{% else %}<p class="muted">등록된 게임이 없습니다.</p>{% endfor %}</div></section></main>{% endblock %}
+{% block content %}
+<main class="wrap panel-page">
+  <div class="topline"><a href="{{url_for('index')}}" class="back">← 공개 목록</a><a href="{{url_for('admin_logout')}}">로그아웃</a></div>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div><h1>BoardLife에서 게임 추가</h1><p>먼저 URL 자동 가져오기를 시도합니다.</p></div>
+      <a class="button" href="{{url_for('new_game')}}">+ 직접 추가</a>
+    </div>
+    <form method="post" class="import-form">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="url" name="url" placeholder="https://boardlife.co.kr/game/19110" required>
+      <input type="text" name="location" value="{{ default_location }}" placeholder="보유 장소" required>
+      <button class="primary">URL 자동 가져오기</button>
+    </form>
+    <p class="hint">BoardLife가 Render 서버 요청을 403으로 차단하면 아래의 <b>페이지 복사로 가져오기</b>를 사용하세요.</p>
+  </section>
+
+  <section class="panel paste-panel">
+    <h2>📋 BoardLife 페이지 복사로 가져오기</h2>
+    <p>서버 차단과 관계없이 브라우저에 보이는 게임 정보를 읽습니다.</p>
+    <ol class="import-steps">
+      <li>BoardLife 게임 페이지를 엽니다.</li>
+      <li><b>Ctrl+A</b> → <b>Ctrl+C</b>로 페이지 전체를 복사합니다. (Mac: ⌘A → ⌘C)</li>
+      <li>아래 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣습니다.</li>
+      <li>읽어온 내용을 확인한 뒤 <b>게임 추가</b>를 누릅니다.</li>
+    </ol>
+
+    <form method="post" action="{{ url_for('new_game') }}" id="pasteImportForm" class="paste-import-form">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="paste-top-row">
+        <label>BoardLife 주소
+          <input id="pasteSourceUrl" name="source_url" type="url" placeholder="https://boardlife.co.kr/game/19110" required>
+        </label>
+        <label>보유 장소
+          <input name="location" value="{{ default_location }}" placeholder="아지트" required>
+        </label>
+      </div>
+
+      <div id="boardlifePasteBox" class="boardlife-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 페이지 붙여넣기">
+        여기를 클릭하고 BoardLife 페이지를 붙여넣으세요 (Ctrl+V)
+      </div>
+      <div id="pasteStatus" class="paste-status muted">아직 읽어온 게임이 없습니다.</div>
+
+      <input type="hidden" name="title" id="piTitle">
+      <input type="hidden" name="subtitle" id="piSubtitle">
+      <input type="hidden" name="image_url" id="piImage">
+      <input type="hidden" name="video_url" value="">
+      <input type="hidden" name="material_url" value="">
+      <input type="hidden" name="year" id="piYear">
+      <input type="hidden" name="min_players" id="piMinPlayers">
+      <input type="hidden" name="max_players" id="piMaxPlayers">
+      <input type="hidden" name="best_players" id="piBestPlayers">
+      <input type="hidden" name="recommended_players" id="piRecommendedPlayers">
+      <input type="hidden" name="min_time" id="piMinTime">
+      <input type="hidden" name="max_time" id="piMaxTime">
+      <input type="hidden" name="difficulty" id="piDifficulty">
+      <input type="hidden" name="rating" id="piRating">
+      <input type="hidden" name="age" id="piAge">
+      <input type="hidden" name="category" id="piCategory">
+      <input type="hidden" name="description" id="piDescription">
+
+      <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>읽어온 게임 추가</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>등록 게임 {{games|length}}개</h2>
+    <div class="admin-list">
+      {% for g in games %}
+      <div class="admin-item">
+        {% if g.image_url %}<img src="{{g.image_url}}" alt="">{% else %}<div class="mini-placeholder">🎲</div>{% endif %}
+        <div class="grow"><b>{{g.title}}</b><small>{{g.min_players or '?'}}–{{g.max_players or '?'}}명 · {{g.min_time or '?'}}–{{g.max_time or '?'}}분 · 📍 {{g.location or '미지정'}}</small></div>
+        <a class="button" href="{{url_for('edit_game', game_id=g.id)}}">수정</a>
+        <form method="post" action="{{url_for('delete_game', game_id=g.id)}}" onsubmit="return confirm('삭제할까요?')">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="danger">삭제</button>
+        </form>
+      </div>
+      {% else %}<p class="muted">등록된 게임이 없습니다.</p>{% endfor %}
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const box = document.getElementById('boardlifePasteBox');
+  const status = document.getElementById('pasteStatus');
+  const submit = document.getElementById('pasteImportButton');
+  const sourceUrl = document.getElementById('pasteSourceUrl');
+
+  const set = (id, value) => { document.getElementById(id).value = value ?? ''; };
+  const first = (re, text, group = 1) => { const m = text.match(re); return m ? (m[group] || '').trim() : ''; };
+
+  box.addEventListener('paste', (event) => {
+    event.preventDefault();
+    const plain = event.clipboardData.getData('text/plain') || '';
+    const html = event.clipboardData.getData('text/html') || '';
+    const normalized = plain.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ');
+    const compact = normalized.replace(/\s+/g, ' ').trim();
+
+    let doc = null;
+    if (html) doc = new DOMParser().parseFromString(html, 'text/html');
+
+    let title = '';
+    if (doc) {
+      const headings = [...doc.querySelectorAll('h1,h2')].map(el => (el.textContent || '').trim());
+      title = headings.find(t => t.length > 3 && /보드게임\s*$/.test(t)) || '';
+    }
+    if (!title) {
+      const lines = normalized.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      title = lines.find(t => t !== '보드게임' && t.length > 3 && t.length < 120 && /보드게임\s*$/.test(t)) || '';
+    }
+    title = title.replace(/\s*보드게임\s*$/, '').trim();
+
+    let image = '';
+    if (doc) {
+      const images = [...doc.querySelectorAll('img')];
+      const candidate = images.find(img => /보드게임/.test(img.alt || '') && /boardlife\.co\.kr/.test(img.src || ''))
+        || images.find(img => /img\.boardlife\.co\.kr\/data\/photo\//.test(img.src || ''));
+      image = candidate ? candidate.src : '';
+    }
+    if (!image && html) {
+      image = first(/(https?:\/\/img\.boardlife\.co\.kr\/data\/photo\/[^"'<>\s]+)/i, html);
+      image = image.replace(/&amp;/g, '&');
+    }
+
+    const year = first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, compact);
+    const players = compact.match(/인원\s*(\d+)\s*[-~]\s*(\d+)\s*명/);
+    const time = compact.match(/플레이\s*시간\s*(\d+)\s*[-~]\s*(\d+)\s*분/);
+    const difficulty = first(/난이도\s*([0-9]+(?:\.[0-9]+)?)/, compact);
+    const rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, compact);
+    const recommendation = compact.match(/베스트\s*:?\s*([^,\)]+).*?추천\s*:?\s*([^\)]+)/);
+    const age = first(/사용\s*연령\s*([^\s]{1,20}\s*이상)/, compact);
+    const category = first(/카테고리\s*([^\s]{1,40})/, compact);
+
+    let subtitle = '';
+    if (title) {
+      const titlePos = compact.indexOf(title);
+      if (titlePos >= 0) {
+        const afterTitle = compact.slice(titlePos + title.length, titlePos + title.length + 300);
+        subtitle = first(/보드게임\s+([A-Za-z][A-Za-z0-9:'!?,.()\-\s]{2,120}?)\s+(?:19|20)\d{2}년/, afterTitle);
+      }
+    }
+
+    let description = '';
+    const descMatch = compact.match(/게임\s*설명\s*(?:설명글\s*)?(.{20,1200}?)(?:\s*\+\s*더보기|\s*평가\s*[0-9])/);
+    if (descMatch) description = descMatch[1].trim().slice(0, 1000);
+
+    set('piTitle', title);
+    set('piSubtitle', subtitle);
+    set('piImage', image);
+    set('piYear', year);
+    set('piMinPlayers', players ? players[1] : '');
+    set('piMaxPlayers', players ? players[2] : '');
+    set('piBestPlayers', recommendation ? recommendation[1].trim() : '');
+    set('piRecommendedPlayers', recommendation ? recommendation[2].trim() : '');
+    set('piMinTime', time ? time[1] : '');
+    set('piMaxTime', time ? time[2] : '');
+    set('piDifficulty', difficulty);
+    set('piRating', rating);
+    set('piAge', age);
+    set('piCategory', category);
+    set('piDescription', description);
+
+    if (!sourceUrl.value) {
+      const urlInClipboard = first(/(https?:\/\/(?:www\.)?boardlife\.co\.kr\/game\/\d+)/i, html + ' ' + plain);
+      if (urlInClipboard) sourceUrl.value = urlInClipboard;
+    }
+
+    if (title) {
+      const facts = [];
+      if (players) facts.push(`${players[1]}~${players[2]}명`);
+      if (time) facts.push(`${time[1]}~${time[2]}분`);
+      if (difficulty) facts.push(`웨이트 ${difficulty}`);
+      status.innerHTML = `<b>✓ ${title}</b>${facts.length ? ' · ' + facts.join(' · ') : ''}${image ? ' · 이미지 확인됨' : ' · 이미지 없음'}`;
+      box.textContent = '✓ 페이지 정보를 읽었습니다. 다시 붙여넣으면 새 정보로 교체됩니다.';
+      box.classList.add('loaded');
+      submit.disabled = false;
+    } else {
+      status.textContent = '게임명을 찾지 못했습니다. BoardLife 게임 상세 페이지에서 페이지 전체를 복사했는지 확인해 주세요.';
+      box.textContent = '다시 클릭하고 BoardLife 게임 페이지 전체를 붙여넣으세요.';
+      box.classList.remove('loaded');
+      submit.disabled = true;
+    }
+  });
+})();
+</script>
+{% endblock %}
