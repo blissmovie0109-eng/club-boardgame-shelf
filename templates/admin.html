@@ -177,8 +177,10 @@
 
     let rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
     if (!rating) {
-      const topArea = titlePos >= 0 ? compact.slice(Math.max(0, titlePos - 400), titlePos + 300) : compact.slice(0, 700);
+      const topArea = titlePos >= 0 ? compact.slice(Math.max(0, titlePos - 600), titlePos + 300) : compact.slice(0, 900);
       rating = first(/★\s*([0-9]+(?:\.[0-9]+)?)/, topArea);
+      if (!rating) rating = first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+(?:전체|전략)(?:\s|$)/, topArea);
+      if (!rating) rating = first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+전체\s*\d+위/, topArea);
     }
 
     let age = first(/(?:사용\s*)?연령\s*([0-9]+세\s*이상)/, core);
