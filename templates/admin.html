@@ -50,7 +50,12 @@
         <label>최대 시간 <input name="max_time" id="piMaxTime" type="number" min="1"></label>
         <label class="wide">이미지 URL <input name="image_url" id="piImage" type="url"></label>
         <label class="wide">🎬 영상 URL (선택) <input name="video_url" id="piVideo" type="url" placeholder="https://www.youtube.com/watch?v=..."></label>
-        <label class="wide">카테고리 <input name="category" id="piCategory"></label>
+        <label class="wide">카테고리
+          <input name="category" id="piCategory" list="categoryOptions" placeholder="전략 / 추상 / 컬렉터블 / 가족 / 어린이 / 파티 / 테마 / 워게임 / 머더미스터리">
+          <datalist id="categoryOptions">
+            <option value="전략"><option value="추상"><option value="컬렉터블"><option value="가족"><option value="어린이"><option value="파티"><option value="테마"><option value="워게임"><option value="머더미스터리">
+          </datalist>
+        </label>
         <label class="wide">게임 설명 <textarea name="description" id="piDescription" rows="4"></textarea></label>
       </div>
 
@@ -94,6 +99,12 @@
   const clean = s => (s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
   const first = (re, text, group=1) => { const m = text.match(re); return m ? clean(m[group]) : ''; };
   const rangeRe = '[-~–—]';
+  const allowedCategories = ['전략', '추상', '컬렉터블', '가족', '어린이', '파티', '테마', '워게임', '머더미스터리'];
+
+  function normalizeCategory(value) {
+    const text = clean(value).replace(/^[,·/|\s]+|[,·/|\s]+$/g, '');
+    return allowedCategories.find(category => text === category || text.startsWith(category + ',') || text.includes(category)) || '';
+  }
 
   function findMainTitle(doc, plain) {
     if (doc) {
@@ -224,7 +235,9 @@
     set('piMaxTime', maxTime);
     set('piImage', image);
 
-    const category = first(/카테고리\s+([^\s]{1,50})/, core);
+    const categoryIndex = core.indexOf('카테고리');
+    const categoryChunk = categoryIndex >= 0 ? core.slice(categoryIndex, categoryIndex + 180) : '';
+    const category = normalizeCategory(categoryChunk);
     set('piCategory', category);
 
     let description = '';
@@ -243,6 +256,7 @@
     if (rating) facts.push(`평점 ${rating}`);
     if (age) facts.push(age);
     if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`);
+    if (category) facts.push(`카테고리 ${category}`);
     status.innerHTML = `<b>✓ ${title}</b>${facts.length ? ' · ' + facts.join(' · ') : ''}`;
     submit.disabled = false;
   });
