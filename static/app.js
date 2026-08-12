@@ -89,19 +89,17 @@ function actionLinks(game) {
 }
 
 function typeBadge(game) {
-  if (game.game_type === 'expansion') return '<span class="tag">🧩 확장</span>';
   if (game.game_type === 'standalone_expansion') return '<span class="tag">🧩 독립형 확장</span>';
   return '';
 }
 
 function cardHtml(game) {
   const title = escapeHtml(game.title);
+  const detailUrl = escapeHtml(game.detail_url || `/game/${game.id}`);
   const image = game.image_url
     ? `<img src="${escapeHtml(game.image_url)}" alt="${title}" loading="lazy" referrerpolicy="no-referrer">`
     : '<div class="cover-placeholder">🎲</div>';
-  const cover = game.source_url?.startsWith('http')
-    ? `<a class="cover-link" href="${escapeHtml(game.source_url)}" target="_blank" rel="noopener"><div class="collection-cover">${image}</div></a>`
-    : `<div class="collection-cover">${image}</div>`;
+  const cover = `<a class="cover-link" href="${detailUrl}" aria-label="${title} 상세보기"><div class="collection-cover">${image}</div></a>`;
   const playersText = game.min_players
     ? `${game.min_players}${game.max_players && game.max_players !== game.min_players ? `~${game.max_players}` : ''}명`
     : '정보 없음';
@@ -109,15 +107,18 @@ function cardHtml(game) {
     ? `${game.min_time}${game.max_time && game.max_time !== game.min_time ? `~${game.max_time}` : ''}분`
     : '';
   const actions = actionLinks(game);
-  const badges = [game.category ? `<span class="tag">${escapeHtml(game.category)}</span>` : '', typeBadge(game)].filter(Boolean).join(' ');
-  const parentInfo = game.game_type === 'expansion' && game.parent_title
+  const expansionBadge = game.expansion_count
+    ? `<span class="tag expansion-count-tag">🧩 확장 ${game.expansion_count}개</span>`
+    : '';
+  const badges = [game.category ? `<span class="tag">${escapeHtml(game.category)}</span>` : '', typeBadge(game), expansionBadge].filter(Boolean).join(' ');
+  const parentInfo = game.game_type === 'standalone_expansion' && game.parent_title
     ? `<div class="info-line">🧩 <b>본판:</b> ${escapeHtml(game.parent_title)}</div>`
     : '';
 
   return `<article class="collection-card" data-game-id="${game.id}">
     ${cover}
     <div class="collection-body">
-      <h2>${title}</h2>
+      <h2><a class="game-title-link" href="${detailUrl}">${title}</a></h2>
       ${badges ? `<div class="category-row">${badges}</div>` : ''}
       ${parentInfo}
       <div class="info-line">⚖ <b>웨이트:</b> ${stars(game.difficulty)}</div>
@@ -159,17 +160,18 @@ async function loadGames({ resetPage = false } = {}) {
 function showTodayPick(game) {
   if (!todayPick || !game) return;
   todayPickCover.innerHTML = game.image_url
-    ? `<img src="${escapeHtml(game.image_url)}" alt="${escapeHtml(game.title)}" referrerpolicy="no-referrer">`
-    : '<div class="today-pick-placeholder">🎲</div>';
-  todayPickTitle.textContent = game.title;
+    ? `<a href="${escapeHtml(game.detail_url)}"><img src="${escapeHtml(game.image_url)}" alt="${escapeHtml(game.title)}" referrerpolicy="no-referrer"></a>`
+    : `<a href="${escapeHtml(game.detail_url)}"><div class="today-pick-placeholder">🎲</div></a>`;
+  todayPickTitle.innerHTML = `<a class="game-title-link" href="${escapeHtml(game.detail_url)}">${escapeHtml(game.title)}</a>`;
   todayPickSubtitle.textContent = [game.subtitle, game.year ? `${game.year}년` : '', game.game_type === 'standalone_expansion' ? '독립형 확장' : ''].filter(Boolean).join(' · ');
   const facts = [];
   if (game.min_players) facts.push(`👥 ${game.min_players}${game.max_players && game.max_players !== game.min_players ? `~${game.max_players}` : ''}명`);
   if (game.difficulty) facts.push(`⚖ 웨이트 ${Number(game.difficulty).toFixed(2)}`);
   if (game.min_time) facts.push(`⏱ ${game.min_time}${game.max_time && game.max_time !== game.min_time ? `~${game.max_time}` : ''}분`);
   if (game.location) facts.push(`📍 ${game.location}`);
+  if (game.expansion_count) facts.push(`🧩 확장 ${game.expansion_count}개`);
   todayPickFacts.innerHTML = facts.map(f => `<span>${escapeHtml(f)}</span>`).join('');
-  todayPickActions.innerHTML = actionLinks(game) || '<span class="muted">등록된 링크가 없습니다.</span>';
+  todayPickActions.innerHTML = `<a class="info-btn" href="${escapeHtml(game.detail_url)}">게임 상세</a>${actionLinks(game)}`;
   todayPick.classList.remove('hidden');
   todayPick.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
