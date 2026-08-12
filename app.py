@@ -1,3 +1,4 @@
+import base64
 import hmac
 import os
 import re
@@ -7,10 +8,12 @@ from functools import wraps
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy import Float, Integer, String, Text, create_engine, func, inspect, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, scoped_session, sessionmaker
+
+from logo_data import KIRIBO_LOGO_JPG_B64
 
 load_dotenv()
 
@@ -21,6 +24,7 @@ CLUB_NAME = os.environ.get("CLUB_NAME", "보드게임 컬렉션")
 SITE_TAGLINE = os.environ.get("SITE_TAGLINE", "아지트에 있는 보드게임을 한눈에 확인하세요.")
 DEFAULT_LOCATION = os.environ.get("DEFAULT_LOCATION", "아지트")
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'games.db')}")
+KIRIBO_LOGO_BYTES = base64.b64decode(KIRIBO_LOGO_JPG_B64)
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://"):]
@@ -243,11 +247,16 @@ def game_to_dict(game):
     }
 
 
+@app.route("/kiribo-logo.jpg")
+def kiribo_logo():
+    response = Response(KIRIBO_LOGO_BYTES, mimetype="image/jpeg")
+    response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+    return response
+
+
 @app.route("/")
 def index():
     db = DBSession()
-    # PostgreSQL requires DISTINCT queries to order by selected expressions.
-    # Ordering directly by location is sufficient here and avoids a 500 error.
     locations = db.scalars(
         select(Game.location)
         .where(Game.location.is_not(None), Game.location != "")
