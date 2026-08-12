@@ -1,7 +1,6 @@
 import base64
-import csv
 import hmac
-import io
+import json
 import os
 import re
 import secrets
@@ -27,8 +26,7 @@ SITE_TAGLINE = os.environ.get("SITE_TAGLINE", "아지트에 있는 보드게임�
 DEFAULT_LOCATION = os.environ.get("DEFAULT_LOCATION", "아지트")
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'games.db')}")
 KIRIBO_LOGO_BYTES = base64.b64decode(KIRIBO_LOGO_JPG_B64)
-MAX_CSV_ROWS = 5000
-MAX_CSV_BYTES = 5 * 1024 * 1024
+MAX_BULK_PASTE_GAMES = 300
 ALLOWED_CATEGORIES = (
     "전략",
     "추상",
@@ -300,70 +298,16 @@ def form_game_data(form):
     }
 
 
-def csv_value(row, *names):
-    normalized = {clean_text(k).lower(): clean_text(v) for k, v in row.items() if k is not None}
-    for name in names:
-        value = normalized.get(name.lower())
-        if value:
-            return value
-    return ""
-
-
-def csv_game_data(row):
-    min_players = safe_int(csv_value(row, "최소인원", "min_players", "min players"))
-    max_players = safe_int(csv_value(row, "최대인원", "max_players", "max players"))
-    compact_players = csv_value(row, "인원", "players")
-    if compact_players and (min_players is None or max_players is None):
-        match = re.search(r"(\d+)\s*[-~–—]\s*(\d+)", compact_players)
-        if match:
-            min_players = min_players or int(match.group(1))
-            max_players = max_players or int(match.group(2))
-        else:
-            one = safe_int(re.sub(r"\D", "", compact_players))
-            if one:
-                min_players = min_players or one
-                max_players = max_players or one
-
-    min_time = safe_int(csv_value(row, "최소시간", "min_time", "min time"))
-    max_time = safe_int(csv_value(row, "최대시간", "max_time", "max time"))
-    compact_time = csv_value(row, "시간", "플레이시간", "playtime", "play time")
-    if compact_time and (min_time is None or max_time is None):
-        match = re.search(r"(\d+)\s*[-~–—]\s*(\d+)", compact_time)
-        if match:
-            min_time = min_time or int(match.group(1))
-            max_time = max_time or int(match.group(2))
-        else:
-            one = safe_int(re.sub(r"\D", "", compact_time))
-            if one:
-                min_time = min_time or one
-                max_time = max_time or one
-    if min_time is not None and max_time is None:
-        max_time = min_time
-    if max_time is not None and min_time is None:
-        min_time = max_time
-
-    return {
-        "title": csv_value(row, "게임명", "title", "이름", "name"),
-        "subtitle": csv_value(row, "영문/부제", "영문명", "부제", "subtitle"),
-        "image_url": csv_value(row, "이미지URL", "image_url", "image url"),
-        "video_url": csv_value(row, "영상URL", "video_url", "video url"),
-        "material_url": csv_value(row, "자료URL", "material_url", "material url"),
-        "year": safe_int(csv_value(row, "출시연도", "연도", "year")),
-        "min_players": min_players,
-        "max_players": max_players,
-        "best_players": csv_value(row, "베스트인원", "best_players", "best players"),
-        "recommended_players": csv_value(row, "추천인원", "recommended_players", "recommended players"),
-        "min_time": min_time,
-        "max_time": max_time,
-        "difficulty": safe_float(csv_value(row, "웨이트", "난이도", "difficulty", "weight")),
-        "rating": safe_float(csv_value(row, "평점", "rating")),
-        "age": csv_value(row, "연령", "age"),
-        "category": normalize_category(csv_value(row, "카테고리", "category")),
-        "location": csv_value(row, "보유장소", "장소", "location") or DEFAULT_LOCATION,
-        "game_type": normalize_game_type(csv_value(row, "게임종류", "종류", "game_type", "game type")),
-        "parent_title": csv_value(row, "본판게임명", "본판", "parent_title", "parent title"),
-        "description": csv_value(row, "게임설명", "설명", "description"),
-    }
+def incomplete_game_condition():
+    return or_(
+        Game.image_url.is_(None),
+        Game.image_url == "",
+        Game.difficulty.is_(None),
+        Game.min_players.is_(None),
+        Game.max_players.is_(None),
+        Game.min_time.is_(None),
+        Game.max_time.is_(None),
+    )
 
 
 def game_conditions():
@@ -479,8 +423,6 @@ def api_games():
 def api_random_game():
     db = DBSession()
     conditions = game_conditions()
-    # 일반 확장은 본판이 없으면 플레이할 수 있으므로 오늘의 선택에서 제외합니다.
-    # 독립형 확장은 단독 플레이가 가능하므로 추천 대상에 포함합니다.
     conditions.append(Game.game_type != "expansion")
     stmt = select(Game).where(*conditions)
     game = db.scalar(stmt.order_by(func.random()).limit(1))
@@ -514,17 +456,34 @@ def admin():
     db = DBSession()
     page = max(1, safe_int(request.args.get("page")) or 1)
     per_page = 50
+    incomplete_only = request.args.get("incomplete") == "1"
+    incomplete_clause = incomplete_game_condition()
+
     total = db.scalar(select(func.count(Game.id))) or 0
-    pages = max(1, (total + per_page - 1) // per_page)
+    incomplete_count = db.scalar(select(func.count(Game.id)).where(incomplete_clause)) or 0
+    shown_total = incomplete_count if incomplete_only else total
+    pages = max(1, (shown_total + per_page - 1) // per_page)
     page = min(page, pages)
+
+    stmt = select(Game)
+    if incomplete_only:
+        stmt = stmt.where(incomplete_clause)
     games = db.scalars(
-        select(Game).order_by(Game.id.desc()).offset((page - 1) * per_page).limit(per_page)
+        stmt.order_by(Game.id.desc()).offset((page - 1) * per_page).limit(per_page)
     ).all()
+
+    enrich_game_id = safe_int(request.args.get("enrich"))
+    enrich_game = db.get(Game, enrich_game_id) if enrich_game_id else None
+
     return render_template(
         "admin.html",
         games=games,
         default_location=DEFAULT_LOCATION,
         total_games=total,
+        shown_total=shown_total,
+        incomplete_count=incomplete_count,
+        incomplete_only=incomplete_only,
+        enrich_game=enrich_game,
         admin_page=page,
         admin_pages=pages,
     )
@@ -534,10 +493,11 @@ def admin():
 @admin_required
 def admin_duplicate_check():
     source_url = canonical_source_url(request.args.get("source_url"))
+    exclude_game_id = safe_int(request.args.get("exclude_game_id"))
     if not source_url:
         return jsonify({"duplicate": False})
     db = DBSession()
-    game = duplicate_game_for_source(db, source_url)
+    game = duplicate_game_for_source(db, source_url, exclude_game_id=exclude_game_id)
     if not game:
         return jsonify({"duplicate": False, "source_url": source_url})
     return jsonify({
@@ -552,107 +512,66 @@ def admin_duplicate_check():
     })
 
 
-@app.route("/admin/games/template.csv")
+@app.route("/admin/games/bulk-paste", methods=["POST"])
 @admin_required
-def bulk_csv_template():
-    headers = [
-        "BoardLife주소", "게임명", "영문/부제", "게임종류", "본판게임명", "출시연도",
-        "최소인원", "최대인원", "베스트인원", "추천인원", "최소시간", "최대시간",
-        "웨이트", "평점", "연령", "카테고리", "보유장소", "이미지URL", "영상URL",
-        "자료URL", "게임설명",
-    ]
-    output = io.StringIO()
-    csv.writer(output).writerow(headers)
-    payload = ("\ufeff" + output.getvalue()).encode("utf-8")
-    response = Response(payload, mimetype="text/csv")
-    response.headers["Content-Disposition"] = "attachment; filename=boardgames_template.csv"
-    return response
-
-
-@app.route("/admin/games/import", methods=["POST"])
-@admin_required
-def bulk_csv_import():
-    upload = request.files.get("csv_file")
-    if not upload or not upload.filename:
-        flash("CSV 파일을 선택해 주세요.", "error")
+def bulk_paste_import():
+    raw_json = request.form.get("bulk_games_json", "")
+    location = clean_text(request.form.get("bulk_location")) or DEFAULT_LOCATION
+    try:
+        items = json.loads(raw_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        flash("붙여넣은 게임 목록을 읽지 못했습니다. 다시 붙여넣어 주세요.", "error")
         return redirect(url_for("admin"))
 
-    raw = upload.read(MAX_CSV_BYTES + 1)
-    if len(raw) > MAX_CSV_BYTES:
-        flash("CSV 파일은 5MB 이하만 업로드할 수 있습니다.", "error")
+    if not isinstance(items, list) or not items:
+        flash("등록할 게임이 없습니다.", "error")
         return redirect(url_for("admin"))
 
-    decoded = None
-    for encoding in ("utf-8-sig", "cp949"):
-        try:
-            decoded = raw.decode(encoding)
-            break
-        except UnicodeDecodeError:
-            continue
-    if decoded is None:
-        flash("CSV 문자 인코딩을 읽을 수 없습니다. UTF-8 또는 CP949로 저장해 주세요.", "error")
-        return redirect(url_for("admin"))
-
-    reader = csv.DictReader(io.StringIO(decoded))
-    if not reader.fieldnames:
-        flash("CSV 첫 줄에 열 이름이 필요합니다.", "error")
-        return redirect(url_for("admin"))
-
+    items = items[:MAX_BULK_PASTE_GAMES]
     db = DBSession()
-    existing_rows = db.execute(select(Game.source_url)).all()
-    existing_sources = {canonical_source_url(row.source_url) for row in existing_rows if row.source_url}
-    existing_boardlife_ids = {
-        game_id
-        for row in existing_rows
-        if (game_id := boardlife_game_id(row.source_url))
-    }
-
     added = 0
     duplicates = 0
     invalid = 0
-    processed = 0
 
-    for row in reader:
-        if processed >= MAX_CSV_ROWS:
-            break
-        processed += 1
-        data = csv_game_data(row)
-        if not data["title"]:
+    for item in items:
+        if not isinstance(item, dict) or not item.get("selected", True):
+            continue
+
+        title = clean_text(item.get("title"))[:250]
+        source_url = canonical_source_url(item.get("source_url"))
+        if not title or not boardlife_game_id(source_url):
             invalid += 1
             continue
 
-        supplied_source = csv_value(row, "BoardLife주소", "출처주소", "source_url", "url")
-        source_url = canonical_source_url(supplied_source)
-        boardlife_id = boardlife_game_id(source_url)
-
-        if boardlife_id and boardlife_id in existing_boardlife_ids:
+        if duplicate_game_for_source(db, source_url):
             duplicates += 1
             continue
-        if source_url and source_url in existing_sources:
-            duplicates += 1
-            continue
-        if not source_url:
-            source_url = f"manual:{uuid.uuid4()}"
 
-        game = Game(source_url=source_url, **data)
+        game_type = normalize_game_type(item.get("game_type"))
+        game = Game(
+            source_url=source_url,
+            title=title,
+            subtitle=clean_text(item.get("subtitle"))[:250],
+            image_url=clean_text(item.get("image_url"))[:1000],
+            year=safe_int(item.get("year")),
+            location=location,
+            game_type=game_type,
+            parent_title=clean_text(item.get("parent_title"))[:250],
+        )
         try:
             with db.begin_nested():
                 db.add(game)
                 db.flush()
             added += 1
-            existing_sources.add(source_url)
-            if boardlife_id:
-                existing_boardlife_ids.add(boardlife_id)
         except IntegrityError:
             duplicates += 1
 
     db.commit()
-    suffix = f"추가 {added}개 · 중복 건너뜀 {duplicates}개 · 오류/빈 제목 {invalid}개"
-    if processed >= MAX_CSV_ROWS:
-        flash(f"최대 {MAX_CSV_ROWS}행까지만 처리했습니다. {suffix}", "success")
-    else:
-        flash(f"CSV 등록 완료: {suffix}", "success")
-    return redirect(url_for("admin"))
+    extra = ""
+    if len(items) >= MAX_BULK_PASTE_GAMES:
+        extra = f" · 한 번에 최대 {MAX_BULK_PASTE_GAMES}개까지 처리"
+    flash(f"대량 등록 완료: 추가 {added}개 · 중복 건너뜀 {duplicates}개 · 읽기 실패 {invalid}개{extra}", "success")
+    return redirect(url_for("admin", incomplete=1))
 
 
 @app.route("/admin/game/new", methods=["GET", "POST"])
@@ -695,6 +614,52 @@ def new_game():
     return render_template("new.html", game={}, default_location=DEFAULT_LOCATION)
 
 
+@app.route("/admin/game/<int:game_id>/enrich", methods=["POST"])
+@admin_required
+def enrich_game(game_id):
+    db = DBSession()
+    game = db.get(Game, game_id)
+    if not game:
+        abort(404)
+
+    supplied_source = clean_text(request.form.get("source_url"))
+    source_url = canonical_source_url(supplied_source)
+    old_boardlife_id = boardlife_game_id(game.source_url)
+    new_boardlife_id = boardlife_game_id(source_url)
+    if old_boardlife_id and new_boardlife_id and old_boardlife_id != new_boardlife_id:
+        flash("선택한 게임과 다른 BoardLife 상세페이지를 붙여넣었습니다. 다시 확인해 주세요.", "error")
+        return redirect(url_for("admin", incomplete=1, enrich=game.id))
+
+    if source_url:
+        duplicate = duplicate_game_for_source(db, source_url, exclude_game_id=game.id)
+        if duplicate:
+            flash(f"이 BoardLife 게임은 이미 {duplicate.title}(으)로 등록되어 있습니다.", "error")
+            return redirect(url_for("admin", incomplete=1, enrich=game.id))
+
+    data = form_game_data(request.form)
+    for key, value in data.items():
+        if key in {"location", "game_type"}:
+            setattr(game, key, value)
+        elif value not in (None, ""):
+            setattr(game, key, value)
+    if data.get("game_type") == "base":
+        game.parent_title = ""
+    elif data.get("parent_title"):
+        game.parent_title = data["parent_title"]
+    if source_url:
+        game.source_url = source_url
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        flash("같은 BoardLife 게임이 이미 등록되어 있습니다.", "error")
+        return redirect(url_for("admin", incomplete=1, enrich=game.id))
+
+    flash(f"{game.title} 정보를 보강했습니다.", "success")
+    return redirect(url_for("admin", incomplete=1))
+
+
 @app.route("/admin/game/<int:game_id>/edit", methods=["GET", "POST"])
 @admin_required
 def edit_game(game_id):
@@ -709,6 +674,8 @@ def edit_game(game_id):
             return render_template("edit.html", game=game, default_location=DEFAULT_LOCATION)
         for key, value in data.items():
             setattr(game, key, value)
+        if game.game_type == "base":
+            game.parent_title = ""
         db.commit()
         flash("게임 정보를 수정했습니다.", "success")
         return redirect(url_for("admin"))
