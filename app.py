@@ -10,7 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
-from sqlalchemy import Float, Integer, String, Text, create_engine, func, select
+from sqlalchemy import Float, Integer, String, Text, create_engine, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, scoped_session, sessionmaker
 
@@ -19,8 +19,9 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "change-me")
 SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-CLUB_NAME = os.environ.get("CLUB_NAME", "아지트 보드게임")
-SITE_TAGLINE = os.environ.get("SITE_TAGLINE", "오늘 아지트에서 무슨 게임 할까요?")
+CLUB_NAME = os.environ.get("CLUB_NAME", "보드게임 컬렉션")
+SITE_TAGLINE = os.environ.get("SITE_TAGLINE", "아지트에 있는 보드게임을 한눈에 확인하세요.")
+DEFAULT_LOCATION = os.environ.get("DEFAULT_LOCATION", "아지트")
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'games.db')}")
 
 if DATABASE_URL.startswith("postgres://"):
@@ -59,6 +60,7 @@ class Game(Base):
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     age: Mapped[str] = mapped_column(String(100), default="")
     category: Mapped[str] = mapped_column(String(250), default="")
+    location: Mapped[str] = mapped_column(String(150), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[str] = mapped_column(String(40), server_default=func.current_timestamp())
 
@@ -84,6 +86,15 @@ def remove_db_session(exception=None):
 
 def init_db():
     Base.metadata.create_all(engine)
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("games")}
+    if "location" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE games ADD COLUMN location VARCHAR(150) DEFAULT ''"))
+            connection.execute(
+                text("UPDATE games SET location = :location WHERE location IS NULL OR location = ''"),
+                {"location": DEFAULT_LOCATION},
+            )
 
 
 def admin_required(fn):
@@ -125,8 +136,8 @@ def clean_text(value):
     return re.sub(r"\s+", " ", value or "").strip()
 
 
-def first_match(pattern, text, flags=0):
-    match = re.search(pattern, text, flags)
+def first_match(pattern, text_value, flags=0):
+    match = re.search(pattern, text_value, flags)
     return match.groups() if match else None
 
 
@@ -182,11 +193,11 @@ def safe_next_url(value):
     return value
 
 
-def extract_label_value(text, label, value_pattern, window=120):
-    idx = text.find(label)
+def extract_label_value(text_value, label, value_pattern, window=120):
+    idx = text_value.find(label)
     if idx < 0:
         return None
-    chunk = text[idx: idx + window]
+    chunk = text_value[idx: idx + window]
     match = re.search(value_pattern, chunk)
     return match.groups() if match else None
 
@@ -198,7 +209,7 @@ def parse_boardlife(url):
     }
     response = fetch_boardlife(url, headers)
     soup = BeautifulSoup(response.text, "html.parser")
-    text = clean_text(soup.get_text(" ", strip=True))
+    page_text = clean_text(soup.get_text(" ", strip=True))
 
     def meta(*keys):
         for key in keys:
@@ -223,45 +234,45 @@ def parse_boardlife(url):
 
     description = meta("description", "og:description")
 
-    players = extract_label_value(text, "인원", r"(\d+)\s*[-~]\s*(\d+)\s*명")
+    players = extract_label_value(page_text, "인원", r"(\d+)\s*[-~]\s*(\d+)\s*명")
     if not players:
-        players = first_match(r"인원\s*(\d+)\s*[-~]\s*(\d+)\s*명", text)
+        players = first_match(r"인원\s*(\d+)\s*[-~]\s*(\d+)\s*명", page_text)
     min_players, max_players = (map(int, players) if players else (None, None))
 
-    playtime = extract_label_value(text, "플레이 시간", r"(\d+)\s*[-~]\s*(\d+)\s*분")
+    playtime = extract_label_value(page_text, "플레이 시간", r"(\d+)\s*[-~]\s*(\d+)\s*분")
     if not playtime:
-        playtime = first_match(r"플레이 시간\s*(\d+)\s*[-~]\s*(\d+)\s*분", text)
+        playtime = first_match(r"플레이 시간\s*(\d+)\s*[-~]\s*(\d+)\s*분", page_text)
     min_time, max_time = (map(int, playtime) if playtime else (None, None))
 
     difficulty = None
-    difficulty_match = first_match(r"난이도\s*([0-9]+(?:\.[0-9]+)?)", text)
+    difficulty_match = first_match(r"난이도\s*([0-9]+(?:\.[0-9]+)?)", page_text)
     if difficulty_match:
         difficulty = safe_float(difficulty_match[0])
 
     rating = None
-    rating_match = first_match(r"평점\s*([0-9]+(?:\.[0-9]+)?)", text)
+    rating_match = first_match(r"평점\s*([0-9]+(?:\.[0-9]+)?)", page_text)
     if rating_match:
         rating = safe_float(rating_match[0])
 
     year = None
-    year_match = first_match(r"(?:^|\s)((?:19|20)\d{2})년(?:\s|$)", text)
+    year_match = first_match(r"(?:^|\s)((?:19|20)\d{2})년(?:\s|$)", page_text)
     if year_match:
         year = safe_int(year_match[0])
 
     best_players = ""
     recommended_players = ""
-    recommendation = first_match(r"베스트\s*:?\s*([^,\)]+).*?추천\s*:?\s*([^\)]+)", text)
+    recommendation = first_match(r"베스트\s*:?\s*([^,\)]+).*?추천\s*:?\s*([^\)]+)", page_text)
     if recommendation:
         best_players = clean_text(recommendation[0])
         recommended_players = clean_text(recommendation[1])
 
     age = ""
-    age_match = first_match(r"사용 연령\s*([^\n]{1,30}?이상)", text)
+    age_match = first_match(r"사용 연령\s*([^\n]{1,30}?이상)", page_text)
     if age_match:
         age = clean_text(age_match[0])
 
     category = ""
-    category_match = first_match(r"카테고리\s*([^|]{1,100})", text)
+    category_match = first_match(r"카테고리\s*([^|]{1,100})", page_text)
     if category_match:
         category = clean_text(category_match[0])[:100]
 
@@ -284,6 +295,7 @@ def parse_boardlife(url):
         "rating": rating,
         "age": age,
         "category": category,
+        "location": DEFAULT_LOCATION,
         "description": description[:500],
     }
 
@@ -304,6 +316,7 @@ def form_game_data(form):
         "rating": safe_float(clean_text(form.get("rating"))),
         "age": clean_text(form.get("age")),
         "category": clean_text(form.get("category")),
+        "location": clean_text(form.get("location")) or DEFAULT_LOCATION,
         "description": clean_text(form.get("description")),
     }
 
@@ -312,7 +325,8 @@ def form_game_data(form):
 def index():
     db = DBSession()
     games = db.scalars(select(Game).order_by(func.lower(Game.title))).all()
-    return render_template("index.html", games=games)
+    locations = sorted({clean_text(game.location) for game in games if clean_text(game.location)})
+    return render_template("index.html", games=games, locations=locations)
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -340,11 +354,13 @@ def admin():
     db = DBSession()
     if request.method == "POST":
         url = clean_text(request.form.get("url"))
+        location = clean_text(request.form.get("location")) or DEFAULT_LOCATION
         if not validate_boardlife_url(url):
             flash("BoardLife 게임 주소 형식이 아닙니다. 예: https://boardlife.co.kr/game/20251", "error")
             return redirect(url_for("admin"))
         try:
             data = parse_boardlife(url)
+            data["location"] = location
             game = Game(**data)
             db.add(game)
             db.commit()
@@ -358,7 +374,7 @@ def admin():
         return redirect(url_for("admin"))
 
     games = db.scalars(select(Game).order_by(Game.id.desc())).all()
-    return render_template("admin.html", games=games)
+    return render_template("admin.html", games=games, default_location=DEFAULT_LOCATION)
 
 
 @app.route("/admin/game/new", methods=["GET", "POST"])
@@ -368,7 +384,7 @@ def new_game():
         data = form_game_data(request.form)
         if not data["title"]:
             flash("게임 이름은 필수입니다.", "error")
-            return render_template("new.html", game=data)
+            return render_template("new.html", game=data, default_location=DEFAULT_LOCATION)
 
         source_url = clean_text(request.form.get("source_url")) or f"manual:{uuid.uuid4()}"
         db = DBSession()
@@ -381,7 +397,7 @@ def new_game():
         except IntegrityError:
             db.rollback()
             flash("같은 출처 주소의 게임이 이미 있습니다.", "error")
-    return render_template("new.html", game={})
+    return render_template("new.html", game={}, default_location=DEFAULT_LOCATION)
 
 
 @app.route("/admin/game/<int:game_id>/edit", methods=["GET", "POST"])
@@ -396,13 +412,13 @@ def edit_game(game_id):
         data = form_game_data(request.form)
         if not data["title"]:
             flash("게임 이름은 필수입니다.", "error")
-            return render_template("edit.html", game=game)
+            return render_template("edit.html", game=game, default_location=DEFAULT_LOCATION)
         for key, value in data.items():
             setattr(game, key, value)
         db.commit()
         flash("게임 정보를 수정했습니다.", "success")
         return redirect(url_for("admin"))
-    return render_template("edit.html", game=game)
+    return render_template("edit.html", game=game, default_location=DEFAULT_LOCATION)
 
 
 @app.route("/admin/game/<int:game_id>/delete", methods=["POST"])
@@ -425,4 +441,8 @@ def health():
 init_db()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=os.environ.get("FLASK_DEBUG") == "1")
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "5000")),
+        debug=os.environ.get("FLASK_DEBUG") == "1",
+    )
