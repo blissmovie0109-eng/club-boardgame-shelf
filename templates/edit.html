@@ -12,7 +12,7 @@
         <h2>{{ game.title }}의 확장</h2>
         <p>확장은 공개 메인 목록에 따로 나오지 않고, 회원이 이 본판을 눌렀을 때 함께 표시됩니다.</p>
       </div>
-      <a class="primary expansion-add-button" href="{{ url_for('new_game', parent_id=game.id) }}">+ 이 게임의 확장 추가</a>
+      <a class="primary expansion-add-button" href="{{ url_for('admin', parent_id=game.id, parent_title=game.title, parent_location=game.location or default_location) }}#detail-import">+ 이 게임의 확장 추가</a>
     </div>
     {% if expansions %}
     <div class="linked-expansion-list">
