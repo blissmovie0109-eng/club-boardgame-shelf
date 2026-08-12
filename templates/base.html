@@ -25,6 +25,7 @@
   <meta name="twitter:image" content="{{ url_for('kiribo_logo', _external=True, _scheme='https', v='1') }}">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin-extra.css') }}">
 </head>
 <body>
   {% with messages = get_flashed_messages(with_categories=true) %}
