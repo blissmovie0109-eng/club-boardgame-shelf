@@ -17,7 +17,8 @@
       <li>BoardLife에서 등록할 게임의 상세 페이지를 엽니다.</li>
       <li><b>Ctrl+A → Ctrl+C</b>로 페이지 전체를 복사합니다. (Mac: ⌘A → ⌘C)</li>
       <li>아래 큰 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣습니다.</li>
-      <li>자동으로 채워진 정보를 확인하고 필요하면 수정합니다. 영상이 있으면 <b>영상 URL</b>을 직접 넣을 수 있습니다.</li>
+      <li>자동으로 채워진 정보를 확인하고, <b>본판 / 확장 / 독립형 확장</b>을 선택합니다.</li>
+      <li>BoardLife 게임 번호가 이미 등록돼 있으면 중복 등록을 자동으로 막습니다.</li>
       <li><b>확인한 게임 추가</b>를 누릅니다.</li>
     </ol>
 
@@ -31,6 +32,7 @@
           <input name="location" value="{{ default_location }}" placeholder="아지트" required>
         </label>
       </div>
+      <div id="duplicateStatus" class="duplicate-status hidden" aria-live="polite"></div>
 
       <div id="boardlifePasteBox" class="boardlife-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 페이지 붙여넣기">여기를 클릭하고 Ctrl+V로 붙여넣으세요</div>
       <div id="pasteStatus" class="paste-status muted">아직 읽어온 게임이 없습니다.</div>
@@ -38,6 +40,14 @@
       <div id="pastePreview" class="edit-grid hidden">
         <label class="wide">게임명 <input name="title" id="piTitle" required></label>
         <label class="wide">영문/부제 <input name="subtitle" id="piSubtitle"></label>
+        <label>게임 종류
+          <select name="game_type" id="piGameType">
+            <option value="base">본판</option>
+            <option value="expansion">확장 — 랜덤 추천 제외</option>
+            <option value="standalone_expansion">독립형 확장 — 랜덤 추천 포함</option>
+          </select>
+        </label>
+        <label>본판 게임명 <input name="parent_title" id="piParentTitle" placeholder="확장일 때 예: 아크 노바"></label>
         <label>출시연도 <input name="year" id="piYear" type="number"></label>
         <label>평점 <input name="rating" id="piRating" type="number" step="0.1" min="0" max="10"></label>
         <label>웨이트 <input name="difficulty" id="piDifficulty" type="number" step="0.01" min="0" max="5"></label>
@@ -64,13 +74,43 @@
     </form>
   </section>
 
+  <section class="panel bulk-panel">
+    <div class="section-heading">
+      <div>
+        <h2>📦 CSV로 여러 게임 한 번에 등록</h2>
+        <p>엑셀이나 구글시트에 게임을 정리한 뒤 CSV로 올리면 최대 5,000행을 한 번에 처리합니다.</p>
+      </div>
+      <a class="button" href="{{ url_for('bulk_csv_template') }}">⬇ CSV 양식 받기</a>
+    </div>
+    <div class="bulk-guide">
+      <span><b>필수:</b> 게임명</span>
+      <span><b>추천:</b> BoardLife주소 — 게임 번호로 중복을 정확하게 거릅니다.</span>
+      <span><b>게임종류:</b> 본판 / 확장 / 독립형 확장</span>
+      <span><b>본판게임명:</b> 확장이라면 어떤 본판에 붙는지 적어두면 관리하기 쉽습니다.</span>
+    </div>
+    <form class="bulk-import-form" method="post" action="{{ url_for('bulk_csv_import') }}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <label class="bulk-file-label">CSV 파일
+        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      </label>
+      <button class="primary" type="submit">CSV 일괄 등록</button>
+    </form>
+    <p class="hint">UTF-8 또는 Excel 한글 CSV(CP949)를 지원합니다. 중복은 자동으로 건너뛰고 완료 후 처리 결과를 알려줍니다.</p>
+  </section>
+
   <section class="panel">
     <h2>등록 게임 {{ total_games }}개</h2>
     <div class="admin-list">
       {% for g in games %}
       <div class="admin-item">
         {% if g.image_url %}<img src="{{g.image_url}}" alt="">{% else %}<div class="mini-placeholder">🎲</div>{% endif %}
-        <div class="grow"><b>{{g.title}}</b><small>{{g.min_players or '?'}}–{{g.max_players or '?'}}명 · {{g.min_time or '?'}}–{{g.max_time or '?'}}분 · 📍 {{g.location or '미지정'}}</small></div>
+        <div class="grow">
+          <b>{{g.title}}</b>
+          <small>
+            {% if g.game_type == 'expansion' %}🧩 확장{% if g.parent_title %} · 본판: {{g.parent_title}}{% endif %} · {% elif g.game_type == 'standalone_expansion' %}🧩 독립형 확장 · {% endif %}
+            {{g.min_players or '?'}}–{{g.max_players or '?'}}명 · {{g.min_time or '?'}}–{{g.max_time or '?'}}분 · 📍 {{g.location or '미지정'}}
+          </small>
+        </div>
         <a class="button" href="{{url_for('edit_game', game_id=g.id)}}">수정</a>
         <form method="post" action="{{url_for('delete_game', game_id=g.id)}}" onsubmit="return confirm('삭제할까요?')">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="danger">삭제</button>
@@ -95,16 +135,59 @@
   const submit = document.getElementById('pasteImportButton');
   const preview = document.getElementById('pastePreview');
   const sourceUrl = document.getElementById('pasteSourceUrl');
+  const duplicateStatus = document.getElementById('duplicateStatus');
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
   const clean = s => (s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
   const first = (re, text, group=1) => { const m = text.match(re); return m ? clean(m[group]) : ''; };
+  const escapeHtml = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const rangeRe = '[-~–—]';
   const allowedCategories = ['전략', '추상', '컬렉터블', '가족', '어린이', '파티', '테마', '워게임', '머더미스터리'];
+  let importReady = false;
+  let duplicateFound = false;
+  let duplicateTimer = null;
+
+  function syncSubmit() {
+    submit.disabled = !importReady || duplicateFound;
+  }
 
   function normalizeCategory(value) {
     const text = clean(value).replace(/^[,·/|\s]+|[,·/|\s]+$/g, '');
     return allowedCategories.find(category => text === category || text.startsWith(category + ',') || text.includes(category)) || '';
   }
+
+  async function checkDuplicate() {
+    const value = clean(sourceUrl.value);
+    duplicateFound = false;
+    if (!value) {
+      duplicateStatus.classList.add('hidden');
+      syncSubmit();
+      return false;
+    }
+    try {
+      const response = await fetch(`/admin/api/duplicate?source_url=${encodeURIComponent(value)}`, {headers:{'Accept':'application/json'}});
+      if (!response.ok) return false;
+      const data = await response.json();
+      duplicateStatus.classList.remove('hidden', 'ok', 'error');
+      if (data.duplicate) {
+        duplicateFound = true;
+        const game = data.game || {};
+        duplicateStatus.classList.add('error');
+        duplicateStatus.innerHTML = `⚠ 이미 등록된 게임입니다: <b>${escapeHtml(game.title)}</b>${game.location ? ` · 📍 ${escapeHtml(game.location)}` : ''} <a href="${escapeHtml(game.edit_url || '#')}">등록된 게임 보기</a>`;
+      } else {
+        duplicateStatus.classList.add('ok');
+        duplicateStatus.textContent = '✓ 아직 등록되지 않은 BoardLife 게임입니다.';
+      }
+    } catch (e) {
+      duplicateStatus.classList.add('hidden');
+    }
+    syncSubmit();
+    return duplicateFound;
+  }
+
+  sourceUrl.addEventListener('input', () => {
+    clearTimeout(duplicateTimer);
+    duplicateTimer = setTimeout(checkDuplicate, 300);
+  });
 
   function findMainTitle(doc, plain) {
     if (doc) {
@@ -159,8 +242,10 @@
     return { subtitle, year };
   }
 
-  box.addEventListener('paste', event => {
+  box.addEventListener('paste', async event => {
     event.preventDefault();
+    importReady = false;
+    syncSubmit();
     const plain = event.clipboardData.getData('text/plain') || '';
     const html = event.clipboardData.getData('text/html') || '';
     const doc = html ? new DOMParser().parseFromString(html, 'text/html') : null;
@@ -169,7 +254,6 @@
     if (!title) {
       status.textContent = '메인 게임 제목을 찾지 못했습니다. BoardLife 게임 상세 페이지에서 Ctrl+A → Ctrl+C를 다시 해주세요.';
       preview.classList.add('hidden');
-      submit.disabled = true;
       return;
     }
 
@@ -178,12 +262,10 @@
     const core = titlePos >= 0 ? compact.slice(titlePos, titlePos + 12000) : compact.slice(0, 12000);
     const heading = findSubtitleAndYear(doc, plain, title);
     const players = core.match(new RegExp('인원\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*명'));
-
     const timeRange = core.match(new RegExp('(?:플레이\\s*)?시간\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*분'));
     const singleTime = !timeRange ? core.match(/(?:플레이\s*)?시간\s*(\d+)\s*분/) : null;
     const minTime = timeRange ? timeRange[1] : (singleTime ? singleTime[1] : '');
     const maxTime = timeRange ? timeRange[2] : (singleTime ? singleTime[1] : '');
-
     const difficulty = first(/난이도\s*([0-9]+(?:\.[0-9]+)?)/, core);
 
     let rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
@@ -258,7 +340,9 @@
     if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`);
     if (category) facts.push(`카테고리 ${category}`);
     status.innerHTML = `<b>✓ ${title}</b>${facts.length ? ' · ' + facts.join(' · ') : ''}`;
-    submit.disabled = false;
+    importReady = true;
+    await checkDuplicate();
+    syncSubmit();
   });
 })();
 </script>
