@@ -4,125 +4,154 @@
 <main class="wrap panel-page">
   <div class="topline"><a href="{{url_for('index')}}" class="back">← 공개 목록</a><a href="{{url_for('admin_logout')}}">로그아웃</a></div>
 
-  <section class="panel paste-panel">
+  <section class="panel bulk-panel">
     <div class="section-heading">
       <div>
-        <h1>📋 BoardLife 페이지 복사로 게임 추가</h1>
-        <p>BoardLife의 서버 자동 접근 차단과 관계없이, 브라우저에 보이는 게임 정보를 복사해서 등록합니다.</p>
+        <h1>⚡ 여러 게임 한 번에 기본 등록</h1>
+        <p>BoardLife에서 게임이 여러 개 보이는 목록·순위 페이지를 통째로 복사하면 게임 링크와 이름을 찾아 한 번에 등록합니다.</p>
       </div>
-      <a class="button" href="{{url_for('new_game')}}">+ 직접 추가</a>
+    </div>
+    <ol class="import-steps compact-steps">
+      <li>BoardLife에서 등록할 게임들이 여러 개 보이는 페이지를 엽니다.</li>
+      <li><b>Ctrl+A → Ctrl+C</b> 후 아래 상자에 <b>Ctrl+V</b>합니다.</li>
+      <li>찾아낸 게임 목록에서 필요 없는 항목만 체크 해제하고, 확장이라면 종류를 바꿉니다.</li>
+      <li><b>선택한 게임 한 번에 등록</b>을 누릅니다. 이미 등록된 게임 번호는 자동으로 건너뜁니다.</li>
+    </ol>
+
+    <form id="bulkPasteForm" method="post" action="{{ url_for('bulk_paste_import') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="bulk_games_json" id="bulkGamesJson">
+      <div class="bulk-paste-top">
+        <label>보유 장소
+          <input name="bulk_location" value="{{ default_location }}" placeholder="아지트" required>
+        </label>
+        <span class="hint">한 번에 최대 300개 · 상세정보가 비어 있는 게임은 아래 ‘정보 보강’ 모드에서 빠르게 채울 수 있습니다.</span>
+      </div>
+      <div id="bulkPasteBox" class="boardlife-paste-box bulk-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 목록 페이지 붙여넣기">BoardLife 목록 페이지를 여기에 Ctrl+V</div>
+      <div id="bulkPasteStatus" class="paste-status muted">아직 읽어온 목록이 없습니다.</div>
+      <div id="bulkPreview" class="bulk-preview hidden"></div>
+      <div id="bulkActions" class="bulk-actions hidden">
+        <button type="button" class="button" id="bulkSelectAll">전체 선택</button>
+        <button type="button" class="button" id="bulkSelectNone">전체 해제</button>
+        <button type="submit" class="primary bulk-submit">선택한 게임 한 번에 등록</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel paste-panel" id="detail-import">
+    <div class="section-heading">
+      <div>
+        {% if enrich_game %}
+        <span class="enrich-kicker">✨ 정보 보강 모드</span>
+        <h1>{{ enrich_game.title }} 정보 채우기</h1>
+        <p>이 게임의 BoardLife 상세페이지를 열어 Ctrl+A → Ctrl+C 후 아래에 붙여넣으세요. 기존 정보는 유지하고 새로 읽힌 값만 보강합니다.</p>
+        {% else %}
+        <h1>📋 BoardLife 상세페이지로 한 게임 등록</h1>
+        <p>게임 하나를 상세하게 등록할 때 사용합니다. BoardLife 상세페이지 전체를 복사해 붙여넣으세요.</p>
+        {% endif %}
+      </div>
+      <div class="heading-actions">
+        {% if enrich_game %}<a class="button" href="{{ url_for('admin', incomplete=1) }}">보강 취소</a>{% endif %}
+        <a class="button" href="{{url_for('new_game')}}">+ 직접 추가</a>
+      </div>
     </div>
 
     <ol class="import-steps">
-      <li>BoardLife에서 등록할 게임의 상세 페이지를 엽니다.</li>
+      <li>BoardLife에서 해당 게임의 상세 페이지를 엽니다.</li>
       <li><b>Ctrl+A → Ctrl+C</b>로 페이지 전체를 복사합니다. (Mac: ⌘A → ⌘C)</li>
       <li>아래 큰 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣습니다.</li>
-      <li>자동으로 채워진 정보를 확인하고, <b>본판 / 확장 / 독립형 확장</b>을 선택합니다.</li>
-      <li>BoardLife 게임 번호가 이미 등록돼 있으면 중복 등록을 자동으로 막습니다.</li>
-      <li><b>확인한 게임 추가</b>를 누릅니다.</li>
+      <li>자동으로 채워진 정보를 확인하고 <b>본판 / 확장 / 독립형 확장</b>을 선택합니다.</li>
+      <li>BoardLife 게임 번호를 기준으로 중복 등록을 자동으로 막습니다.</li>
     </ol>
 
-    <form method="post" action="{{ url_for('new_game') }}" id="pasteImportForm" class="paste-import-form">
+    <form method="post" action="{% if enrich_game %}{{ url_for('enrich_game', game_id=enrich_game.id) }}{% else %}{{ url_for('new_game') }}{% endif %}" id="pasteImportForm" class="paste-import-form">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="paste-top-row">
         <label>BoardLife 주소
-          <input id="pasteSourceUrl" name="source_url" type="url" placeholder="https://boardlife.co.kr/game/19110" required>
+          <input id="pasteSourceUrl" name="source_url" type="url" value="{{ enrich_game.source_url if enrich_game and enrich_game.source_url and enrich_game.source_url.startswith('http') else '' }}" placeholder="https://boardlife.co.kr/game/19110" required>
         </label>
         <label>보유 장소
-          <input name="location" value="{{ default_location }}" placeholder="아지트" required>
+          <input name="location" value="{{ enrich_game.location if enrich_game else default_location }}" placeholder="아지트" required>
         </label>
       </div>
       <div id="duplicateStatus" class="duplicate-status hidden" aria-live="polite"></div>
 
-      <div id="boardlifePasteBox" class="boardlife-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 페이지 붙여넣기">여기를 클릭하고 Ctrl+V로 붙여넣으세요</div>
-      <div id="pasteStatus" class="paste-status muted">아직 읽어온 게임이 없습니다.</div>
+      <div id="boardlifePasteBox" class="boardlife-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 상세페이지 붙여넣기">{% if enrich_game %}{{ enrich_game.title }} 상세페이지를 여기에 Ctrl+V{% else %}여기를 클릭하고 Ctrl+V로 붙여넣으세요{% endif %}</div>
+      <div id="pasteStatus" class="paste-status muted">{% if enrich_game %}<b>{{ enrich_game.title }}</b>의 상세정보를 기다리고 있습니다.{% else %}아직 읽어온 게임이 없습니다.{% endif %}</div>
 
       <div id="pastePreview" class="edit-grid hidden">
-        <label class="wide">게임명 <input name="title" id="piTitle" required></label>
-        <label class="wide">영문/부제 <input name="subtitle" id="piSubtitle"></label>
+        <label class="wide">게임명 <input name="title" id="piTitle" value="{{ enrich_game.title if enrich_game else '' }}" required></label>
+        <label class="wide">영문/부제 <input name="subtitle" id="piSubtitle" value="{{ enrich_game.subtitle if enrich_game else '' }}"></label>
         <label>게임 종류
           <select name="game_type" id="piGameType">
-            <option value="base">본판</option>
-            <option value="expansion">확장 — 랜덤 추천 제외</option>
-            <option value="standalone_expansion">독립형 확장 — 랜덤 추천 포함</option>
+            <option value="base" {% if not enrich_game or enrich_game.game_type == 'base' %}selected{% endif %}>본판</option>
+            <option value="expansion" {% if enrich_game and enrich_game.game_type == 'expansion' %}selected{% endif %}>확장 — 랜덤 추천 제외</option>
+            <option value="standalone_expansion" {% if enrich_game and enrich_game.game_type == 'standalone_expansion' %}selected{% endif %}>독립형 확장 — 랜덤 추천 포함</option>
           </select>
         </label>
-        <label>본판 게임명 <input name="parent_title" id="piParentTitle" placeholder="확장일 때 예: 아크 노바"></label>
-        <label>출시연도 <input name="year" id="piYear" type="number"></label>
-        <label>평점 <input name="rating" id="piRating" type="number" step="0.1" min="0" max="10"></label>
-        <label>웨이트 <input name="difficulty" id="piDifficulty" type="number" step="0.01" min="0" max="5"></label>
-        <label>연령 <input name="age" id="piAge"></label>
-        <label>최소 인원 <input name="min_players" id="piMinPlayers" type="number" min="1"></label>
-        <label>최대 인원 <input name="max_players" id="piMaxPlayers" type="number" min="1"></label>
-        <label>베스트 인원 <input name="best_players" id="piBestPlayers" placeholder="예: 3인"></label>
-        <label>추천 인원 <input name="recommended_players" id="piRecommendedPlayers" placeholder="예: 2인"></label>
-        <label>최소 시간 <input name="min_time" id="piMinTime" type="number" min="1"></label>
-        <label>최대 시간 <input name="max_time" id="piMaxTime" type="number" min="1"></label>
-        <label class="wide">이미지 URL <input name="image_url" id="piImage" type="url"></label>
-        <label class="wide">🎬 영상 URL (선택) <input name="video_url" id="piVideo" type="url" placeholder="https://www.youtube.com/watch?v=..."></label>
+        <label>본판 게임명 <input name="parent_title" id="piParentTitle" value="{{ enrich_game.parent_title if enrich_game else '' }}" placeholder="확장일 때 예: 아크 노바"></label>
+        <label>출시연도 <input name="year" id="piYear" type="number" value="{{ enrich_game.year if enrich_game and enrich_game.year else '' }}"></label>
+        <label>평점 <input name="rating" id="piRating" type="number" step="0.1" min="0" max="10" value="{{ enrich_game.rating if enrich_game and enrich_game.rating is not none else '' }}"></label>
+        <label>웨이트 <input name="difficulty" id="piDifficulty" type="number" step="0.01" min="0" max="5" value="{{ enrich_game.difficulty if enrich_game and enrich_game.difficulty is not none else '' }}"></label>
+        <label>연령 <input name="age" id="piAge" value="{{ enrich_game.age if enrich_game else '' }}"></label>
+        <label>최소 인원 <input name="min_players" id="piMinPlayers" type="number" min="1" value="{{ enrich_game.min_players if enrich_game and enrich_game.min_players else '' }}"></label>
+        <label>최대 인원 <input name="max_players" id="piMaxPlayers" type="number" min="1" value="{{ enrich_game.max_players if enrich_game and enrich_game.max_players else '' }}"></label>
+        <label>베스트 인원 <input name="best_players" id="piBestPlayers" value="{{ enrich_game.best_players if enrich_game else '' }}" placeholder="예: 3인"></label>
+        <label>추천 인원 <input name="recommended_players" id="piRecommendedPlayers" value="{{ enrich_game.recommended_players if enrich_game else '' }}" placeholder="예: 2인"></label>
+        <label>최소 시간 <input name="min_time" id="piMinTime" type="number" min="1" value="{{ enrich_game.min_time if enrich_game and enrich_game.min_time else '' }}"></label>
+        <label>최대 시간 <input name="max_time" id="piMaxTime" type="number" min="1" value="{{ enrich_game.max_time if enrich_game and enrich_game.max_time else '' }}"></label>
+        <label class="wide">이미지 URL <input name="image_url" id="piImage" type="url" value="{{ enrich_game.image_url if enrich_game else '' }}"></label>
+        <label class="wide">🎬 영상 URL (선택) <input name="video_url" id="piVideo" type="url" value="{{ enrich_game.video_url if enrich_game else '' }}" placeholder="https://www.youtube.com/watch?v=..."></label>
         <label class="wide">카테고리
-          <input name="category" id="piCategory" list="categoryOptions" placeholder="전략 / 추상 / 컬렉터블 / 가족 / 어린이 / 파티 / 테마 / 워게임 / 머더미스터리">
+          <input name="category" id="piCategory" list="categoryOptions" value="{{ enrich_game.category if enrich_game else '' }}" placeholder="전략 / 추상 / 컬렉터블 / 가족 / 어린이 / 파티 / 테마 / 워게임 / 머더미스터리">
           <datalist id="categoryOptions">
             <option value="전략"><option value="추상"><option value="컬렉터블"><option value="가족"><option value="어린이"><option value="파티"><option value="테마"><option value="워게임"><option value="머더미스터리">
           </datalist>
         </label>
-        <label class="wide">게임 설명 <textarea name="description" id="piDescription" rows="4"></textarea></label>
+        <label class="wide">게임 설명 <textarea name="description" id="piDescription" rows="4">{{ enrich_game.description if enrich_game else '' }}</textarea></label>
       </div>
 
-      <input type="hidden" name="material_url" value="">
-      <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>확인한 게임 추가</button>
+      <input type="hidden" name="material_url" value="{{ enrich_game.material_url if enrich_game else '' }}">
+      <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>{% if enrich_game %}이 게임 정보 업데이트{% else %}확인한 게임 추가{% endif %}</button>
     </form>
-  </section>
-
-  <section class="panel bulk-panel">
-    <div class="section-heading">
-      <div>
-        <h2>📦 CSV로 여러 게임 한 번에 등록</h2>
-        <p>엑셀이나 구글시트에 게임을 정리한 뒤 CSV로 올리면 최대 5,000행을 한 번에 처리합니다.</p>
-      </div>
-      <a class="button" href="{{ url_for('bulk_csv_template') }}">⬇ CSV 양식 받기</a>
-    </div>
-    <div class="bulk-guide">
-      <span><b>필수:</b> 게임명</span>
-      <span><b>추천:</b> BoardLife주소 — 게임 번호로 중복을 정확하게 거릅니다.</span>
-      <span><b>게임종류:</b> 본판 / 확장 / 독립형 확장</span>
-      <span><b>본판게임명:</b> 확장이라면 어떤 본판에 붙는지 적어두면 관리하기 쉽습니다.</span>
-    </div>
-    <form class="bulk-import-form" method="post" action="{{ url_for('bulk_csv_import') }}" enctype="multipart/form-data">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <label class="bulk-file-label">CSV 파일
-        <input type="file" name="csv_file" accept=".csv,text/csv" required>
-      </label>
-      <button class="primary" type="submit">CSV 일괄 등록</button>
-    </form>
-    <p class="hint">UTF-8 또는 Excel 한글 CSV(CP949)를 지원합니다. 중복은 자동으로 건너뛰고 완료 후 처리 결과를 알려줍니다.</p>
   </section>
 
   <section class="panel">
-    <h2>등록 게임 {{ total_games }}개</h2>
+    <div class="admin-list-heading">
+      <div>
+        <h2>{% if incomplete_only %}정보 보강 대상 {{ shown_total }}개{% else %}등록 게임 {{ total_games }}개{% endif %}</h2>
+        <p class="muted">이미지·웨이트·인원·플레이시간 중 하나라도 비어 있으면 ‘정보 부족’으로 표시합니다.</p>
+      </div>
+      <div class="admin-view-switch">
+        <a class="button {% if not incomplete_only %}active-view{% endif %}" href="{{ url_for('admin') }}">전체 {{ total_games }}</a>
+        <a class="button {% if incomplete_only %}active-view{% endif %}" href="{{ url_for('admin', incomplete=1) }}">✨ 정보 부족 {{ incomplete_count }}</a>
+      </div>
+    </div>
     <div class="admin-list">
       {% for g in games %}
-      <div class="admin-item">
+      {% set needs_info = (not g.image_url) or (g.difficulty is none) or (g.min_players is none) or (g.max_players is none) or (g.min_time is none) or (g.max_time is none) %}
+      <div class="admin-item {% if enrich_game and enrich_game.id == g.id %}admin-item-selected{% endif %}">
         {% if g.image_url %}<img src="{{g.image_url}}" alt="">{% else %}<div class="mini-placeholder">🎲</div>{% endif %}
         <div class="grow">
-          <b>{{g.title}}</b>
+          <div class="admin-title-row"><b>{{g.title}}</b>{% if needs_info %}<span class="needs-info-badge">정보 부족</span>{% endif %}</div>
           <small>
             {% if g.game_type == 'expansion' %}🧩 확장{% if g.parent_title %} · 본판: {{g.parent_title}}{% endif %} · {% elif g.game_type == 'standalone_expansion' %}🧩 독립형 확장 · {% endif %}
-            {{g.min_players or '?'}}–{{g.max_players or '?'}}명 · {{g.min_time or '?'}}–{{g.max_time or '?'}}분 · 📍 {{g.location or '미지정'}}
+            {{g.min_players or '?'}}–{{g.max_players or '?'}}명 · {% if g.min_time and g.max_time and g.min_time == g.max_time %}{{g.min_time}}분{% else %}{{g.min_time or '?'}}–{{g.max_time or '?'}}분{% endif %} · 📍 {{g.location or '미지정'}}
           </small>
         </div>
+        {% if needs_info %}<a class="button enrich-button" href="{{ url_for('admin', incomplete=1, enrich=g.id) }}#detail-import">정보 채우기</a>{% endif %}
         <a class="button" href="{{url_for('edit_game', game_id=g.id)}}">수정</a>
         <form method="post" action="{{url_for('delete_game', game_id=g.id)}}" onsubmit="return confirm('삭제할까요?')">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><button class="danger">삭제</button>
         </form>
       </div>
-      {% else %}<p class="muted">등록된 게임이 없습니다.</p>{% endfor %}
+      {% else %}<p class="muted">{% if incomplete_only %}정보가 부족한 게임이 없습니다. 🎉{% else %}등록된 게임이 없습니다.{% endif %}</p>{% endfor %}
     </div>
     {% if admin_pages > 1 %}
     <nav class="admin-pager" aria-label="관리자 게임 목록 페이지">
-      <a class="{% if admin_page <= 1 %}disabled{% endif %}" href="{{ url_for('admin', page=admin_page-1) }}">← 이전</a>
+      <a class="{% if admin_page <= 1 %}disabled{% endif %}" href="{{ url_for('admin', page=admin_page-1, incomplete=1 if incomplete_only else None) }}">← 이전</a>
       <strong>{{ admin_page }} / {{ admin_pages }}</strong>
-      <a class="{% if admin_page >= admin_pages %}disabled{% endif %}" href="{{ url_for('admin', page=admin_page+1) }}">다음 →</a>
+      <a class="{% if admin_page >= admin_pages %}disabled{% endif %}" href="{{ url_for('admin', page=admin_page+1, incomplete=1 if incomplete_only else None) }}">다음 →</a>
     </nav>
     {% endif %}
   </section>
@@ -130,16 +159,161 @@
 
 <script>
 (() => {
+  const clean = s => (s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const escapeHtml = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+  // 여러 게임 한 번에 붙여넣기
+  const bulkBox = document.getElementById('bulkPasteBox');
+  const bulkStatus = document.getElementById('bulkPasteStatus');
+  const bulkPreview = document.getElementById('bulkPreview');
+  const bulkActions = document.getElementById('bulkActions');
+  const bulkForm = document.getElementById('bulkPasteForm');
+  const bulkJson = document.getElementById('bulkGamesJson');
+  let bulkGames = [];
+
+  function gameIdFromHref(href) {
+    const match = String(href || '').match(/(?:https?:\/\/(?:www\.)?boardlife\.co\.kr)?\/game\/(\d+)/i);
+    return match ? match[1] : '';
+  }
+
+  function cleanBulkTitle(value) {
+    let title = clean(value)
+      .replace(/^\d+\s*(?:위|\.|등)\s*/, '')
+      .replace(/\s*보드게임$/, '')
+      .trim();
+    if (title.length < 2 || title.length > 140) return '';
+    if (/^(보기|상세|정보|게임|보드게임|댓글|좋아요|공유|구매|리뷰)$/i.test(title)) return '';
+    if (/로그인|회원가입|전체보기|더보기/.test(title)) return '';
+    return title;
+  }
+
+  function titleFromAnchor(anchor) {
+    const candidates = [];
+    candidates.push(anchor.textContent || '');
+    const ownImage = anchor.querySelector('img');
+    if (ownImage) candidates.push(ownImage.getAttribute('alt') || '');
+
+    let scope = anchor.closest('article, li, tr, [class*="game"], [class*="item"], [class*="card"]') || anchor.parentElement;
+    if (scope) {
+      const heading = scope.querySelector('h1,h2,h3,h4,strong,b,[class*="title"],[class*="name"]');
+      if (heading) candidates.push(heading.textContent || '');
+      const image = scope.querySelector('img[alt]');
+      if (image) candidates.push(image.getAttribute('alt') || '');
+    }
+    for (const candidate of candidates) {
+      const title = cleanBulkTitle(candidate);
+      if (title) return title;
+    }
+    return '';
+  }
+
+  function parseBulkClipboard(html) {
+    if (!html) return [];
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const found = new Map();
+    const anchors = [...doc.querySelectorAll('a[href*="/game/"]')];
+
+    for (const anchor of anchors) {
+      const rawHref = anchor.getAttribute('href') || '';
+      const gameId = gameIdFromHref(rawHref);
+      if (!gameId || found.has(gameId)) continue;
+
+      const title = titleFromAnchor(anchor);
+      if (!title) continue;
+
+      const scope = anchor.closest('article, li, tr, [class*="game"], [class*="item"], [class*="card"]') || anchor.parentElement;
+      const nearby = clean(scope ? scope.textContent : anchor.parentElement?.textContent || '');
+      const yearMatch = nearby.match(/(?:^|\s)((?:19|20)\d{2})(?:년|\s|$)/);
+      let image = '';
+      const imageEl = anchor.querySelector('img') || (scope ? scope.querySelector('img') : null);
+      if (imageEl) image = imageEl.getAttribute('src') || '';
+      if (image.startsWith('//')) image = 'https:' + image;
+
+      const looksExpansion = /(?:^|\s)확장(?:판|게임)?(?:\s|$)/.test(nearby) || /\bExpansion\b/i.test(nearby) || /확장/.test(title);
+      found.set(gameId, {
+        selected: true,
+        source_url: `https://boardlife.co.kr/game/${gameId}`,
+        title,
+        subtitle: '',
+        year: yearMatch ? yearMatch[1] : '',
+        image_url: image,
+        game_type: looksExpansion ? 'expansion' : 'base',
+        parent_title: '',
+      });
+      if (found.size >= 300) break;
+    }
+    return [...found.values()];
+  }
+
+  function renderBulkPreview() {
+    bulkPreview.innerHTML = bulkGames.map((game, index) => `
+      <div class="bulk-game-row" data-index="${index}">
+        <label class="bulk-check"><input type="checkbox" class="bulk-selected" ${game.selected ? 'checked' : ''}><span>${index + 1}</span></label>
+        <div class="bulk-game-main">
+          <input class="bulk-title" value="${escapeHtml(game.title)}" aria-label="게임명">
+          <small>${escapeHtml(game.source_url)}${game.year ? ` · ${escapeHtml(game.year)}년` : ''}</small>
+        </div>
+        <select class="bulk-type" aria-label="게임 종류">
+          <option value="base" ${game.game_type === 'base' ? 'selected' : ''}>본판</option>
+          <option value="expansion" ${game.game_type === 'expansion' ? 'selected' : ''}>확장</option>
+          <option value="standalone_expansion" ${game.game_type === 'standalone_expansion' ? 'selected' : ''}>독립형 확장</option>
+        </select>
+        <input class="bulk-parent" value="${escapeHtml(game.parent_title || '')}" placeholder="본판 게임명 (선택)">
+      </div>`).join('');
+    bulkPreview.classList.toggle('hidden', bulkGames.length === 0);
+    bulkActions.classList.toggle('hidden', bulkGames.length === 0);
+  }
+
+  bulkBox?.addEventListener('paste', event => {
+    event.preventDefault();
+    const html = event.clipboardData.getData('text/html') || '';
+    bulkGames = parseBulkClipboard(html);
+    if (!bulkGames.length) {
+      bulkStatus.textContent = '게임 목록을 찾지 못했습니다. BoardLife에서 게임이 여러 개 보이는 페이지를 Ctrl+A → Ctrl+C로 다시 복사해 주세요.';
+      bulkPreview.classList.add('hidden');
+      bulkActions.classList.add('hidden');
+      return;
+    }
+    renderBulkPreview();
+    bulkBox.textContent = `✓ ${bulkGames.length}개 게임을 찾았습니다.`;
+    bulkBox.classList.add('loaded');
+    bulkStatus.innerHTML = `<b>${bulkGames.length}개</b>를 찾았습니다. 제목과 확장 여부를 훑어보고 필요 없는 항목만 체크 해제하세요. 중복은 등록할 때 자동 제외됩니다.`;
+  });
+
+  bulkSelectAll?.addEventListener('click', () => document.querySelectorAll('.bulk-selected').forEach(el => el.checked = true));
+  bulkSelectNone?.addEventListener('click', () => document.querySelectorAll('.bulk-selected').forEach(el => el.checked = false));
+
+  bulkForm?.addEventListener('submit', event => {
+    const rows = [...document.querySelectorAll('.bulk-game-row')];
+    const payload = rows.map(row => {
+      const index = Number(row.dataset.index);
+      const original = bulkGames[index];
+      return {
+        ...original,
+        selected: row.querySelector('.bulk-selected').checked,
+        title: clean(row.querySelector('.bulk-title').value),
+        game_type: row.querySelector('.bulk-type').value,
+        parent_title: clean(row.querySelector('.bulk-parent').value),
+      };
+    });
+    if (!payload.some(game => game.selected && game.title)) {
+      event.preventDefault();
+      bulkStatus.textContent = '등록할 게임을 한 개 이상 선택해 주세요.';
+      return;
+    }
+    bulkJson.value = JSON.stringify(payload);
+  });
+
+  // 상세페이지 한 게임 등록 / 정보 보강
   const box = document.getElementById('boardlifePasteBox');
   const status = document.getElementById('pasteStatus');
   const submit = document.getElementById('pasteImportButton');
   const preview = document.getElementById('pastePreview');
   const sourceUrl = document.getElementById('pasteSourceUrl');
   const duplicateStatus = document.getElementById('duplicateStatus');
-  const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
-  const clean = s => (s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const enrichGameId = {{ enrich_game.id if enrich_game else 'null' }};
+  const set = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null && value !== '') el.value = value; };
   const first = (re, text, group=1) => { const m = text.match(re); return m ? clean(m[group]) : ''; };
-  const escapeHtml = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const rangeRe = '[-~–—]';
   const allowedCategories = ['전략', '추상', '컬렉터블', '가족', '어린이', '파티', '테마', '워게임', '머더미스터리'];
   let importReady = false;
@@ -164,7 +338,8 @@
       return false;
     }
     try {
-      const response = await fetch(`/admin/api/duplicate?source_url=${encodeURIComponent(value)}`, {headers:{'Accept':'application/json'}});
+      const extra = enrichGameId ? `&exclude_game_id=${encodeURIComponent(enrichGameId)}` : '';
+      const response = await fetch(`/admin/api/duplicate?source_url=${encodeURIComponent(value)}${extra}`, {headers:{'Accept':'application/json'}});
       if (!response.ok) return false;
       const data = await response.json();
       duplicateStatus.classList.remove('hidden', 'ok', 'error');
@@ -175,7 +350,7 @@
         duplicateStatus.innerHTML = `⚠ 이미 등록된 게임입니다: <b>${escapeHtml(game.title)}</b>${game.location ? ` · 📍 ${escapeHtml(game.location)}` : ''} <a href="${escapeHtml(game.edit_url || '#')}">등록된 게임 보기</a>`;
       } else {
         duplicateStatus.classList.add('ok');
-        duplicateStatus.textContent = '✓ 아직 등록되지 않은 BoardLife 게임입니다.';
+        duplicateStatus.textContent = enrichGameId ? '✓ 선택한 게임의 BoardLife 주소입니다.' : '✓ 아직 등록되지 않은 BoardLife 게임입니다.';
       }
     } catch (e) {
       duplicateStatus.classList.add('hidden');
@@ -339,11 +514,13 @@
     if (age) facts.push(age);
     if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`);
     if (category) facts.push(`카테고리 ${category}`);
-    status.innerHTML = `<b>✓ ${title}</b>${facts.length ? ' · ' + facts.join(' · ') : ''}`;
+    status.innerHTML = `<b>✓ ${escapeHtml(title)}</b>${facts.length ? ' · ' + facts.map(escapeHtml).join(' · ') : ''}`;
     importReady = true;
     await checkDuplicate();
     syncSubmit();
   });
+
+  if (enrichGameId && sourceUrl.value) checkDuplicate();
 })();
 </script>
 {% endblock %}
