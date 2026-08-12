@@ -246,11 +246,13 @@ def game_to_dict(game):
 @app.route("/")
 def index():
     db = DBSession()
+    # PostgreSQL requires DISTINCT queries to order by selected expressions.
+    # Ordering directly by location is sufficient here and avoids a 500 error.
     locations = db.scalars(
         select(Game.location)
         .where(Game.location.is_not(None), Game.location != "")
         .distinct()
-        .order_by(func.lower(Game.location))
+        .order_by(Game.location)
     ).all()
     total_games = db.scalar(select(func.count(Game.id))) or 0
     return render_template("index.html", locations=locations, total_games=total_games)
