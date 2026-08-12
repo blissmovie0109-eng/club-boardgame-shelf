@@ -32,6 +32,34 @@ function escapeHtml(value = '') {
     .replaceAll("'", '&#039;');
 }
 
+function linkifyText(value = '') {
+  const text = String(value || '');
+  const urlPattern = /https?:\/\/[^\s<>"']+/gi;
+  let result = '';
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(urlPattern)) {
+    result += escapeHtml(text.slice(lastIndex, match.index));
+
+    let url = match[0];
+    let trailing = '';
+    while (/[),.!?;:\]\}]$/.test(url)) {
+      trailing = url.slice(-1) + trailing;
+      url = url.slice(0, -1);
+    }
+
+    if (url) {
+      const safeUrl = escapeHtml(url);
+      result += `<a class="description-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
+    }
+    result += escapeHtml(trailing);
+    lastIndex = match.index + match[0].length;
+  }
+
+  result += escapeHtml(text.slice(lastIndex));
+  return result;
+}
+
 function queryParams(extra = {}) {
   const params = new URLSearchParams();
   const q = (search?.value || '').trim();
@@ -88,7 +116,7 @@ function cardHtml(game) {
       ${game.recommended_players ? `<div class="info-line">👍 <b>추천:</b> ${escapeHtml(game.recommended_players)}</div>` : ''}
       ${timeText ? `<div class="info-line">⏱ <b>시간:</b> ${timeText}</div>` : ''}
       <div class="info-line location-line">📍 <b>보유 장소:</b> <span class="location-pill">${escapeHtml(game.location || '미지정')}</span></div>
-      ${game.description ? `<details class="game-description"><summary>게임 설명</summary><p>${escapeHtml(game.description)}</p></details>` : ''}
+      ${game.description ? `<details class="game-description"><summary>게임 설명</summary><p>${linkifyText(game.description)}</p></details>` : ''}
       ${actions ? `<div class="card-actions multi-actions">${actions}</div>` : ''}
     </div>
   </article>`;
