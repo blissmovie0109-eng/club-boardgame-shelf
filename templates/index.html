@@ -2,7 +2,7 @@
 {% block content %}
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="topbar-title">🎲 {{ club_name }}</div>
+    <div class="topbar-title"><img class="brand-logo" src="{{ url_for('kiribo_logo') }}" alt="Kiribo 로고"><span>{{ club_name }}</span></div>
     <a class="manage-button" href="{{ url_for('admin') }}">관리 모드</a>
   </div>
 </header>
