@@ -55,7 +55,10 @@
       <h2>조건에 맞는 게임 하나 골라드릴게요</h2>
       <p>인원·웨이트·보유 장소 조건에서 한 게임을 뽑습니다. 본판이 필요한 일반 확장은 자동으로 제외합니다.</p>
     </div>
-    <button id="randomPick" class="random-hero-button" type="button"><span class="dice-orb">🎲</span><span><b>랜덤 게임 뽑기</b><small>오늘의 선택 보기</small></span></button>
+    <div class="picker-tools">
+      <button id="firstPlayerOpen" class="first-player-open" type="button"><span class="target-orb">🎯</span><span><b>선 정하기</b><small>손가락 또는 인원수로</small></span></button>
+      <button id="randomPick" class="random-hero-button" type="button"><span class="dice-orb">🎲</span><span><b>랜덤 게임 뽑기</b><small>오늘의 선택 보기</small></span></button>
+    </div>
   </section>
 
   <section id="todayPick" class="today-pick hidden" aria-live="polite">
@@ -80,5 +83,42 @@
     <button id="nextPage" type="button">다음 →</button>
   </nav>
 </main>
+
+<div id="firstPlayerModal" class="first-player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstPlayerTitle">
+  <div class="first-player-shell">
+    <button id="firstPlayerClose" class="first-player-close" type="button" aria-label="선 정하기 닫기">×</button>
+    <div class="first-player-heading">
+      <span class="first-player-kicker">BOARD GAME TOOL</span>
+      <h2 id="firstPlayerTitle">🎯 선 정하기</h2>
+      <p>이름 입력 없이 바로 골라보세요.</p>
+    </div>
+
+    <section class="finger-picker-section">
+      <div class="first-player-section-title"><b>손가락으로 정하기</b><span>모두 한 손가락씩 화면에 올려주세요</span></div>
+      <div id="touchArena" class="touch-arena">
+        <div class="touch-arena-guide">
+          <div class="touch-hand">☝️</div>
+          <b id="touchGuideTitle">2명 이상 손가락을 올려주세요</b>
+          <span id="touchGuideText">손가락이 모이면 자동으로 추첨합니다.</span>
+        </div>
+        <div id="touchPoints" class="touch-points"></div>
+        <div id="touchCountdown" class="touch-countdown hidden"></div>
+        <div id="touchWinner" class="touch-winner hidden"><span>🎉</span><b>이 손가락이 선!</b></div>
+      </div>
+      <button id="touchReset" class="touch-reset hidden" type="button">다시 뽑기</button>
+    </section>
+
+    <section class="number-picker-section">
+      <div class="first-player-section-title"><b>인원수로 바로 정하기</b><span>테이블이 크거나 멀리 앉아 있을 때</span></div>
+      <div id="playerNumberButtons" class="player-number-buttons">
+        {% for n in range(2, 11) %}<button type="button" data-count="{{ n }}">{{ n }}명</button>{% endfor %}
+      </div>
+      <div id="numberPickResult" class="number-pick-result hidden" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='first-player.css') }}">
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='first-player.js') }}"></script>
 {% endblock %}
