@@ -3,6 +3,7 @@ services:
     name: club-boardgame-shelf
     runtime: python
     plan: free
+    region: singapore
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 60 app:app
     healthCheckPath: /health
@@ -16,6 +17,8 @@ services:
         generateValue: true
       - key: SESSION_COOKIE_SECURE
         value: "true"
+      - key: DEFAULT_LOCATION
+        value: "아지트"
       - key: CLUB_NAME
         value: "우리 동아리 아지트 보드게임"
       - key: SITE_TAGLINE
