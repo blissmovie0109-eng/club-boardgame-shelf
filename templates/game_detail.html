@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}{{ game.title }} · {{ club_name }}{% endblock %}
+{% block content %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="detail-brand" href="{{ url_for('index') }}"><img class="brand-logo" src="{{ url_for('kiribo_logo') }}" alt="Kiribo 로고"><span>{{ club_name }}</span></a>
+    {% if session.get('admin') %}<a class="manage-button" href="{{ url_for('edit_game', game_id=game.id) }}">이 게임 수정</a>{% else %}<a class="manage-button" href="{{ url_for('admin') }}">관리 모드</a>{% endif %}
+  </div>
+</header>
+
+<main class="game-detail-page">
+  <a class="detail-back" href="{{ url_for('index') }}">← 게임 목록으로</a>
+
+  {% if parent_game %}
+  <a class="parent-family-link" href="{{ url_for('game_detail', game_id=parent_game.id) }}">🧩 {{ parent_game.title }} 본판과 함께 보기</a>
+  {% endif %}
+
+  <section class="game-detail-hero">
+    <div class="game-detail-cover">
+      {% if game.image_url %}<img src="{{ game.image_url }}" alt="{{ game.title }}" referrerpolicy="no-referrer">{% else %}<div class="detail-placeholder">🎲</div>{% endif %}
+    </div>
+    <div class="game-detail-copy">
+      <div class="detail-tags">
+        {% if game.category %}<span>{{ game.category }}</span>{% endif %}
+        {% if game_type == 'expansion' %}<span class="expansion-tag">🧩 확장</span>{% elif game_type == 'standalone_expansion' %}<span class="expansion-tag">🧩 독립형 확장</span>{% endif %}
+        {% if expansions %}<span class="family-count-tag">확장 {{ expansions|length }}개 보유</span>{% endif %}
+      </div>
+      <h1>{{ game.title }}</h1>
+      {% if game.subtitle or game.year %}<p class="detail-subtitle">{{ game.subtitle }}{% if game.subtitle and game.year %} · {% endif %}{% if game.year %}{{ game.year }}년{% endif %}</p>{% endif %}
+
+      <div class="detail-facts">
+        {% if game.difficulty is not none %}<div><span>⚖ 웨이트</span><strong>{{ '%.2f'|format(game.difficulty) }}</strong></div>{% endif %}
+        {% if game.rating is not none %}<div><span>⭐ 평점</span><strong>{{ '%.1f'|format(game.rating) }}</strong></div>{% endif %}
+        {% if game.min_players %}<div><span>👥 인원</span><strong>{{ game.min_players }}{% if game.max_players and game.max_players != game.min_players %}~{{ game.max_players }}{% endif %}명</strong></div>{% endif %}
+        {% if game.min_time %}<div><span>⏱ 시간</span><strong>{{ game.min_time }}{% if game.max_time and game.max_time != game.min_time %}~{{ game.max_time }}{% endif %}분</strong></div>{% endif %}
+        {% if game.age %}<div><span>🎂 연령</span><strong>{{ game.age }}</strong></div>{% endif %}
+      </div>
+
+      {% if game.best_players or game.recommended_players %}
+      <div class="detail-recommendation">
+        {% if game.best_players %}<span><b>베스트</b> {{ game.best_players }}</span>{% endif %}
+        {% if game.recommended_players %}<span><b>추천</b> {{ game.recommended_players }}</span>{% endif %}
+      </div>
+      {% endif %}
+
+      <div class="detail-location">📍 <b>보유 장소</b> {{ game.location or '미지정' }}</div>
+
+      {% if game.description %}
+      <div class="detail-description-block">
+        <h2>게임 설명</h2>
+        <p id="detailDescription">{{ game.description }}</p>
+      </div>
+      {% endif %}
+
+      <div class="detail-actions">
+        {% if game.material_url %}<a class="detail-action material" href="{{ game.material_url }}" target="_blank" rel="noopener noreferrer">📄 자료</a>{% endif %}
+        {% if game.video_url %}<a class="detail-action video" href="{{ game.video_url }}" target="_blank" rel="noopener noreferrer">🎬 영상</a>{% endif %}
+        {% if game.source_url and game.source_url.startswith('http') %}<a class="detail-action source" href="{{ game.source_url }}" target="_blank" rel="noopener noreferrer">🔎 BoardLife 정보</a>{% endif %}
+      </div>
+    </div>
+  </section>
+
+  {% if game_type == 'base' %}
+  <section class="expansion-family-section">
+    <div class="family-heading">
+      <div>
+        <span class="family-eyebrow">EXPANSIONS</span>
+        <h2>{{ game.title }} 보유 확장</h2>
+        <p>확장은 메인 목록에 따로 섞이지 않고 이 본판 아래에서 함께 확인할 수 있습니다.</p>
+      </div>
+      <span class="family-total">{{ expansions|length }}개</span>
+    </div>
+
+    {% if expansions %}
+    <div class="expansion-family-grid">
+      {% for expansion in expansions %}
+      <article class="expansion-family-card">
+        <a class="expansion-cover" href="{{ url_for('game_detail', game_id=expansion.id) }}">
+          {% if expansion.image_url %}<img src="{{ expansion.image_url }}" alt="{{ expansion.title }}" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="detail-placeholder">🧩</div>{% endif %}
+        </a>
+        <div class="expansion-card-copy">
+          <span class="expansion-kind">{% if expansion.game_type == 'standalone_expansion' %}독립형 확장 · 랜덤 추천 포함{% else %}확장{% endif %}</span>
+          <h3><a href="{{ url_for('game_detail', game_id=expansion.id) }}">{{ expansion.title }}</a></h3>
+          {% if expansion.subtitle or expansion.year %}<p class="expansion-subtitle">{{ expansion.subtitle }}{% if expansion.subtitle and expansion.year %} · {% endif %}{% if expansion.year %}{{ expansion.year }}년{% endif %}</p>{% endif %}
+          <div class="expansion-mini-facts">
+            {% if expansion.min_players %}<span>👥 {{ expansion.min_players }}{% if expansion.max_players and expansion.max_players != expansion.min_players %}~{{ expansion.max_players }}{% endif %}명</span>{% endif %}
+            {% if expansion.min_time %}<span>⏱ {{ expansion.min_time }}{% if expansion.max_time and expansion.max_time != expansion.min_time %}~{{ expansion.max_time }}{% endif %}분</span>{% endif %}
+            {% if expansion.difficulty is not none %}<span>⚖ {{ '%.2f'|format(expansion.difficulty) }}</span>{% endif %}
+          </div>
+          <div class="expansion-card-actions">
+            <a href="{{ url_for('game_detail', game_id=expansion.id) }}">상세보기</a>
+            {% if expansion.source_url and expansion.source_url.startswith('http') %}<a href="{{ expansion.source_url }}" target="_blank" rel="noopener noreferrer">정보</a>{% endif %}
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="no-expansions">현재 등록된 확장이 없습니다.</div>
+    {% endif %}
+  </section>
+  {% endif %}
+</main>
+
+{% if game.description %}
+<script>
+(() => {
+  const el = document.getElementById('detailDescription');
+  if (!el) return;
+  const text = el.textContent || '';
+  const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const urlPattern = /https?:\/\/[^\s<>"']+/gi;
+  let result = '';
+  let lastIndex = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    result += escapeHtml(text.slice(lastIndex, match.index));
+    let url = match[0];
+    let trailing = '';
+    while (/[),.!?;:\]\}]$/.test(url)) { trailing = url.slice(-1) + trailing; url = url.slice(0, -1); }
+    result += `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>${escapeHtml(trailing)}`;
+    lastIndex = match.index + match[0].length;
+  }
+  result += escapeHtml(text.slice(lastIndex));
+  el.innerHTML = result;
+})();
+</script>
+{% endif %}
+{% endblock %}
