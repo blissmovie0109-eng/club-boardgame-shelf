@@ -167,7 +167,12 @@
     const core = titlePos >= 0 ? compact.slice(titlePos, titlePos + 12000) : compact.slice(0, 12000);
     const heading = findSubtitleAndYear(doc, plain, title);
     const players = core.match(new RegExp('인원\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*명'));
-    const time = core.match(new RegExp('(?:플레이\\s*)?시간\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*분'));
+
+    const timeRange = core.match(new RegExp('(?:플레이\\s*)?시간\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*분'));
+    const singleTime = !timeRange ? core.match(/(?:플레이\s*)?시간\s*(\d+)\s*분/) : null;
+    const minTime = timeRange ? timeRange[1] : (singleTime ? singleTime[1] : '');
+    const maxTime = timeRange ? timeRange[2] : (singleTime ? singleTime[1] : '');
+
     const difficulty = first(/난이도\s*([0-9]+(?:\.[0-9]+)?)/, core);
 
     let rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
@@ -215,8 +220,8 @@
     set('piMaxPlayers', players ? players[2] : '');
     set('piBestPlayers', bestPlayers);
     set('piRecommendedPlayers', recommendedPlayers);
-    set('piMinTime', time ? time[1] : '');
-    set('piMaxTime', time ? time[2] : '');
+    set('piMinTime', minTime);
+    set('piMaxTime', maxTime);
     set('piImage', image);
 
     const category = first(/카테고리\s+([^\s]{1,50})/, core);
@@ -233,7 +238,7 @@
 
     const facts = [];
     if (players) facts.push(`${players[1]}~${players[2]}명`);
-    if (time) facts.push(`${time[1]}~${time[2]}분`);
+    if (minTime) facts.push(minTime === maxTime ? `${minTime}분` : `${minTime}~${maxTime}분`);
     if (difficulty) facts.push(`웨이트 ${difficulty}`);
     if (rating) facts.push(`평점 ${rating}`);
     if (age) facts.push(age);
