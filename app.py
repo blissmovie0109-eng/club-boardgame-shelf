@@ -25,6 +25,17 @@ SITE_TAGLINE = os.environ.get("SITE_TAGLINE", "아지트에 있는 보드게임�
 DEFAULT_LOCATION = os.environ.get("DEFAULT_LOCATION", "아지트")
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'games.db')}")
 KIRIBO_LOGO_BYTES = base64.b64decode(KIRIBO_LOGO_JPG_B64)
+ALLOWED_CATEGORIES = (
+    "전략",
+    "추상",
+    "컬렉터블",
+    "가족",
+    "어린이",
+    "파티",
+    "테마",
+    "워게임",
+    "머더미스터리",
+)
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://"):]
@@ -150,6 +161,16 @@ def clean_text(value):
     return re.sub(r"\s+", " ", value or "").strip()
 
 
+def normalize_category(value):
+    category_text = clean_text(value)
+    if not category_text:
+        return ""
+    for category in ALLOWED_CATEGORIES:
+        if category in category_text:
+            return category
+    return ""
+
+
 def safe_float(value):
     try:
         return float(value)
@@ -190,7 +211,7 @@ def form_game_data(form):
         "difficulty": safe_float(clean_text(form.get("difficulty"))),
         "rating": safe_float(clean_text(form.get("rating"))),
         "age": clean_text(form.get("age")),
-        "category": clean_text(form.get("category")),
+        "category": normalize_category(form.get("category")),
         "location": clean_text(form.get("location")) or DEFAULT_LOCATION,
         "description": clean_text(form.get("description")),
     }
@@ -241,7 +262,7 @@ def game_to_dict(game):
         "difficulty": game.difficulty,
         "rating": game.rating,
         "age": game.age or "",
-        "category": game.category or "",
+        "category": normalize_category(game.category),
         "location": game.location or "",
         "description": game.description or "",
     }
