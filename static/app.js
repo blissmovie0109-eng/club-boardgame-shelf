@@ -40,14 +40,12 @@ function linkifyText(value = '') {
 
   for (const match of text.matchAll(urlPattern)) {
     result += escapeHtml(text.slice(lastIndex, match.index));
-
     let url = match[0];
     let trailing = '';
     while (/[),.!?;:\]\}]$/.test(url)) {
       trailing = url.slice(-1) + trailing;
       url = url.slice(0, -1);
     }
-
     if (url) {
       const safeUrl = escapeHtml(url);
       result += `<a class="description-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
@@ -55,7 +53,6 @@ function linkifyText(value = '') {
     result += escapeHtml(trailing);
     lastIndex = match.index + match[0].length;
   }
-
   result += escapeHtml(text.slice(lastIndex));
   return result;
 }
@@ -91,6 +88,12 @@ function actionLinks(game) {
   return links.join('');
 }
 
+function typeBadge(game) {
+  if (game.game_type === 'expansion') return '<span class="tag">🧩 확장</span>';
+  if (game.game_type === 'standalone_expansion') return '<span class="tag">🧩 독립형 확장</span>';
+  return '';
+}
+
 function cardHtml(game) {
   const title = escapeHtml(game.title);
   const image = game.image_url
@@ -106,11 +109,17 @@ function cardHtml(game) {
     ? `${game.min_time}${game.max_time && game.max_time !== game.min_time ? `~${game.max_time}` : ''}분`
     : '';
   const actions = actionLinks(game);
+  const badges = [game.category ? `<span class="tag">${escapeHtml(game.category)}</span>` : '', typeBadge(game)].filter(Boolean).join(' ');
+  const parentInfo = game.game_type === 'expansion' && game.parent_title
+    ? `<div class="info-line">🧩 <b>본판:</b> ${escapeHtml(game.parent_title)}</div>`
+    : '';
+
   return `<article class="collection-card" data-game-id="${game.id}">
     ${cover}
     <div class="collection-body">
       <h2>${title}</h2>
-      ${game.category ? `<div class="category-row"><span class="tag">${escapeHtml(game.category)}</span></div>` : ''}
+      ${badges ? `<div class="category-row">${badges}</div>` : ''}
+      ${parentInfo}
       <div class="info-line">⚖ <b>웨이트:</b> ${stars(game.difficulty)}</div>
       <div class="info-line">👥 <b>인원:</b> ${playersText}${game.best_players ? ` <span class="muted">(베스트: ${escapeHtml(game.best_players)})</span>` : ''}</div>
       ${game.recommended_players ? `<div class="info-line">👍 <b>추천:</b> ${escapeHtml(game.recommended_players)}</div>` : ''}
@@ -153,7 +162,7 @@ function showTodayPick(game) {
     ? `<img src="${escapeHtml(game.image_url)}" alt="${escapeHtml(game.title)}" referrerpolicy="no-referrer">`
     : '<div class="today-pick-placeholder">🎲</div>';
   todayPickTitle.textContent = game.title;
-  todayPickSubtitle.textContent = [game.subtitle, game.year ? `${game.year}년` : ''].filter(Boolean).join(' · ');
+  todayPickSubtitle.textContent = [game.subtitle, game.year ? `${game.year}년` : '', game.game_type === 'standalone_expansion' ? '독립형 확장' : ''].filter(Boolean).join(' · ');
   const facts = [];
   if (game.min_players) facts.push(`👥 ${game.min_players}${game.max_players && game.max_players !== game.min_players ? `~${game.max_players}` : ''}명`);
   if (game.difficulty) facts.push(`⚖ 웨이트 ${Number(game.difficulty).toFixed(2)}`);
