@@ -55,13 +55,12 @@
       </div>
 
       <input type="hidden" name="material_url" value="">
-
       <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>확인한 게임 추가</button>
     </form>
   </section>
 
   <section class="panel">
-    <h2>등록 게임 {{games|length}}개</h2>
+    <h2>등록 게임 {{ total_games }}개</h2>
     <div class="admin-list">
       {% for g in games %}
       <div class="admin-item">
@@ -74,6 +73,13 @@
       </div>
       {% else %}<p class="muted">등록된 게임이 없습니다.</p>{% endfor %}
     </div>
+    {% if admin_pages > 1 %}
+    <nav class="admin-pager" aria-label="관리자 게임 목록 페이지">
+      <a class="{% if admin_page <= 1 %}disabled{% endif %}" href="{{ url_for('admin', page=admin_page-1) }}">← 이전</a>
+      <strong>{{ admin_page }} / {{ admin_pages }}</strong>
+      <a class="{% if admin_page >= admin_pages %}disabled{% endif %}" href="{{ url_for('admin', page=admin_page+1) }}">다음 →</a>
+    </nav>
+    {% endif %}
   </section>
 </main>
 
