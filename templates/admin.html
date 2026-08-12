@@ -162,13 +162,14 @@
   const clean = s => (s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
   const escapeHtml = value => String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 
-  // 여러 게임 한 번에 붙여넣기
   const bulkBox = document.getElementById('bulkPasteBox');
   const bulkStatus = document.getElementById('bulkPasteStatus');
   const bulkPreview = document.getElementById('bulkPreview');
   const bulkActions = document.getElementById('bulkActions');
   const bulkForm = document.getElementById('bulkPasteForm');
   const bulkJson = document.getElementById('bulkGamesJson');
+  const bulkSelectAll = document.getElementById('bulkSelectAll');
+  const bulkSelectNone = document.getElementById('bulkSelectNone');
   let bulkGames = [];
 
   function gameIdFromHref(href) {
@@ -177,10 +178,7 @@
   }
 
   function cleanBulkTitle(value) {
-    let title = clean(value)
-      .replace(/^\d+\s*(?:위|\.|등)\s*/, '')
-      .replace(/\s*보드게임$/, '')
-      .trim();
+    let title = clean(value).replace(/^\d+\s*(?:위|\.|등)\s*/, '').replace(/\s*보드게임$/, '').trim();
     if (title.length < 2 || title.length > 140) return '';
     if (/^(보기|상세|정보|게임|보드게임|댓글|좋아요|공유|구매|리뷰)$/i.test(title)) return '';
     if (/로그인|회원가입|전체보기|더보기/.test(title)) return '';
@@ -188,12 +186,10 @@
   }
 
   function titleFromAnchor(anchor) {
-    const candidates = [];
-    candidates.push(anchor.textContent || '');
+    const candidates = [anchor.textContent || ''];
     const ownImage = anchor.querySelector('img');
     if (ownImage) candidates.push(ownImage.getAttribute('alt') || '');
-
-    let scope = anchor.closest('article, li, tr, [class*="game"], [class*="item"], [class*="card"]') || anchor.parentElement;
+    const scope = anchor.closest('article, li, tr, [class*="game"], [class*="item"], [class*="card"]') || anchor.parentElement;
     if (scope) {
       const heading = scope.querySelector('h1,h2,h3,h4,strong,b,[class*="title"],[class*="name"]');
       if (heading) candidates.push(heading.textContent || '');
@@ -212,15 +208,11 @@
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const found = new Map();
     const anchors = [...doc.querySelectorAll('a[href*="/game/"]')];
-
     for (const anchor of anchors) {
-      const rawHref = anchor.getAttribute('href') || '';
-      const gameId = gameIdFromHref(rawHref);
+      const gameId = gameIdFromHref(anchor.getAttribute('href') || '');
       if (!gameId || found.has(gameId)) continue;
-
       const title = titleFromAnchor(anchor);
       if (!title) continue;
-
       const scope = anchor.closest('article, li, tr, [class*="game"], [class*="item"], [class*="card"]') || anchor.parentElement;
       const nearby = clean(scope ? scope.textContent : anchor.parentElement?.textContent || '');
       const yearMatch = nearby.match(/(?:^|\s)((?:19|20)\d{2})(?:년|\s|$)/);
@@ -228,38 +220,15 @@
       const imageEl = anchor.querySelector('img') || (scope ? scope.querySelector('img') : null);
       if (imageEl) image = imageEl.getAttribute('src') || '';
       if (image.startsWith('//')) image = 'https:' + image;
-
       const looksExpansion = /(?:^|\s)확장(?:판|게임)?(?:\s|$)/.test(nearby) || /\bExpansion\b/i.test(nearby) || /확장/.test(title);
-      found.set(gameId, {
-        selected: true,
-        source_url: `https://boardlife.co.kr/game/${gameId}`,
-        title,
-        subtitle: '',
-        year: yearMatch ? yearMatch[1] : '',
-        image_url: image,
-        game_type: looksExpansion ? 'expansion' : 'base',
-        parent_title: '',
-      });
+      found.set(gameId, {selected:true,source_url:`https://boardlife.co.kr/game/${gameId}`,title,subtitle:'',year:yearMatch ? yearMatch[1] : '',image_url:image,game_type:looksExpansion ? 'expansion' : 'base',parent_title:''});
       if (found.size >= 300) break;
     }
     return [...found.values()];
   }
 
   function renderBulkPreview() {
-    bulkPreview.innerHTML = bulkGames.map((game, index) => `
-      <div class="bulk-game-row" data-index="${index}">
-        <label class="bulk-check"><input type="checkbox" class="bulk-selected" ${game.selected ? 'checked' : ''}><span>${index + 1}</span></label>
-        <div class="bulk-game-main">
-          <input class="bulk-title" value="${escapeHtml(game.title)}" aria-label="게임명">
-          <small>${escapeHtml(game.source_url)}${game.year ? ` · ${escapeHtml(game.year)}년` : ''}</small>
-        </div>
-        <select class="bulk-type" aria-label="게임 종류">
-          <option value="base" ${game.game_type === 'base' ? 'selected' : ''}>본판</option>
-          <option value="expansion" ${game.game_type === 'expansion' ? 'selected' : ''}>확장</option>
-          <option value="standalone_expansion" ${game.game_type === 'standalone_expansion' ? 'selected' : ''}>독립형 확장</option>
-        </select>
-        <input class="bulk-parent" value="${escapeHtml(game.parent_title || '')}" placeholder="본판 게임명 (선택)">
-      </div>`).join('');
+    bulkPreview.innerHTML = bulkGames.map((game, index) => `<div class="bulk-game-row" data-index="${index}"><label class="bulk-check"><input type="checkbox" class="bulk-selected" ${game.selected ? 'checked' : ''}><span>${index + 1}</span></label><div class="bulk-game-main"><input class="bulk-title" value="${escapeHtml(game.title)}" aria-label="게임명"><small>${escapeHtml(game.source_url)}${game.year ? ` · ${escapeHtml(game.year)}년` : ''}</small></div><select class="bulk-type" aria-label="게임 종류"><option value="base" ${game.game_type === 'base' ? 'selected' : ''}>본판</option><option value="expansion" ${game.game_type === 'expansion' ? 'selected' : ''}>확장</option><option value="standalone_expansion" ${game.game_type === 'standalone_expansion' ? 'selected' : ''}>독립형 확장</option></select><input class="bulk-parent" value="${escapeHtml(game.parent_title || '')}" placeholder="본판 게임명 (선택)"></div>`).join('');
     bulkPreview.classList.toggle('hidden', bulkGames.length === 0);
     bulkActions.classList.toggle('hidden', bulkGames.length === 0);
   }
@@ -282,19 +251,11 @@
 
   bulkSelectAll?.addEventListener('click', () => document.querySelectorAll('.bulk-selected').forEach(el => el.checked = true));
   bulkSelectNone?.addEventListener('click', () => document.querySelectorAll('.bulk-selected').forEach(el => el.checked = false));
-
   bulkForm?.addEventListener('submit', event => {
     const rows = [...document.querySelectorAll('.bulk-game-row')];
     const payload = rows.map(row => {
-      const index = Number(row.dataset.index);
-      const original = bulkGames[index];
-      return {
-        ...original,
-        selected: row.querySelector('.bulk-selected').checked,
-        title: clean(row.querySelector('.bulk-title').value),
-        game_type: row.querySelector('.bulk-type').value,
-        parent_title: clean(row.querySelector('.bulk-parent').value),
-      };
+      const original = bulkGames[Number(row.dataset.index)];
+      return {...original,selected:row.querySelector('.bulk-selected').checked,title:clean(row.querySelector('.bulk-title').value),game_type:row.querySelector('.bulk-type').value,parent_title:clean(row.querySelector('.bulk-parent').value)};
     });
     if (!payload.some(game => game.selected && game.title)) {
       event.preventDefault();
@@ -304,7 +265,6 @@
     bulkJson.value = JSON.stringify(payload);
   });
 
-  // 상세페이지 한 게임 등록 / 정보 보강
   const box = document.getElementById('boardlifePasteBox');
   const status = document.getElementById('pasteStatus');
   const submit = document.getElementById('pasteImportButton');
@@ -312,7 +272,12 @@
   const sourceUrl = document.getElementById('pasteSourceUrl');
   const duplicateStatus = document.getElementById('duplicateStatus');
   const enrichGameId = {{ enrich_game.id if enrich_game else 'null' }};
-  const set = (id, value) => { const el = document.getElementById(id); if (el && value !== undefined && value !== null && value !== '') el.value = value; };
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (enrichGameId && (value === undefined || value === null || value === '')) return;
+    el.value = value || '';
+  };
   const first = (re, text, group=1) => { const m = text.match(re); return m ? clean(m[group]) : ''; };
   const rangeRe = '[-~–—]';
   const allowedCategories = ['전략', '추상', '컬렉터블', '가족', '어린이', '파티', '테마', '워게임', '머더미스터리'];
@@ -320,10 +285,7 @@
   let duplicateFound = false;
   let duplicateTimer = null;
 
-  function syncSubmit() {
-    submit.disabled = !importReady || duplicateFound;
-  }
-
+  function syncSubmit() { submit.disabled = !importReady || duplicateFound; }
   function normalizeCategory(value) {
     const text = clean(value).replace(/^[,·/|\s]+|[,·/|\s]+$/g, '');
     return allowedCategories.find(category => text === category || text.startsWith(category + ',') || text.includes(category)) || '';
@@ -332,11 +294,7 @@
   async function checkDuplicate() {
     const value = clean(sourceUrl.value);
     duplicateFound = false;
-    if (!value) {
-      duplicateStatus.classList.add('hidden');
-      syncSubmit();
-      return false;
-    }
+    if (!value) { duplicateStatus.classList.add('hidden'); syncSubmit(); return false; }
     try {
       const extra = enrichGameId ? `&exclude_game_id=${encodeURIComponent(enrichGameId)}` : '';
       const response = await fetch(`/admin/api/duplicate?source_url=${encodeURIComponent(value)}${extra}`, {headers:{'Accept':'application/json'}});
@@ -352,17 +310,12 @@
         duplicateStatus.classList.add('ok');
         duplicateStatus.textContent = enrichGameId ? '✓ 선택한 게임의 BoardLife 주소입니다.' : '✓ 아직 등록되지 않은 BoardLife 게임입니다.';
       }
-    } catch (e) {
-      duplicateStatus.classList.add('hidden');
-    }
+    } catch (e) { duplicateStatus.classList.add('hidden'); }
     syncSubmit();
     return duplicateFound;
   }
 
-  sourceUrl.addEventListener('input', () => {
-    clearTimeout(duplicateTimer);
-    duplicateTimer = setTimeout(checkDuplicate, 300);
-  });
+  sourceUrl.addEventListener('input', () => { clearTimeout(duplicateTimer); duplicateTimer = setTimeout(checkDuplicate, 300); });
 
   function findMainTitle(doc, plain) {
     if (doc) {
@@ -384,16 +337,13 @@
     }
     const ratingIndex = lines.findIndex(t => t.includes('게임 평점 정보'));
     if (ratingIndex > 0) {
-      for (let i = ratingIndex - 1; i >= Math.max(0, ratingIndex - 6); i--) {
-        if (/보드게임$/.test(lines[i]) && lines[i].length < 160) return lines[i].replace(/\s*보드게임$/, '').trim();
-      }
+      for (let i = ratingIndex - 1; i >= Math.max(0, ratingIndex - 6); i--) if (/보드게임$/.test(lines[i]) && lines[i].length < 160) return lines[i].replace(/\s*보드게임$/, '').trim();
     }
     return '';
   }
 
   function findSubtitleAndYear(doc, plain, title) {
-    let subtitle = '';
-    let year = '';
+    let subtitle = '', year = '';
     if (doc) {
       const h1 = [...doc.querySelectorAll('h1')].find(el => clean(el.textContent).replace(/\s*보드게임$/, '').trim() === title);
       if (h1) {
@@ -419,18 +369,12 @@
 
   box.addEventListener('paste', async event => {
     event.preventDefault();
-    importReady = false;
-    syncSubmit();
+    importReady = false; syncSubmit();
     const plain = event.clipboardData.getData('text/plain') || '';
     const html = event.clipboardData.getData('text/html') || '';
     const doc = html ? new DOMParser().parseFromString(html, 'text/html') : null;
     const title = findMainTitle(doc, plain);
-
-    if (!title) {
-      status.textContent = '메인 게임 제목을 찾지 못했습니다. BoardLife 게임 상세 페이지에서 Ctrl+A → Ctrl+C를 다시 해주세요.';
-      preview.classList.add('hidden');
-      return;
-    }
+    if (!title) { status.textContent = '메인 게임 제목을 찾지 못했습니다. BoardLife 게임 상세 페이지에서 Ctrl+A → Ctrl+C를 다시 해주세요.'; preview.classList.add('hidden'); return; }
 
     const compact = clean(plain || (doc ? doc.body.innerText : ''));
     const titlePos = compact.indexOf(title);
@@ -442,82 +386,44 @@
     const minTime = timeRange ? timeRange[1] : (singleTime ? singleTime[1] : '');
     const maxTime = timeRange ? timeRange[2] : (singleTime ? singleTime[1] : '');
     const difficulty = first(/난이도\s*([0-9]+(?:\.[0-9]+)?)/, core);
-
     let rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
     if (!rating) {
       const topArea = titlePos >= 0 ? compact.slice(Math.max(0, titlePos - 600), titlePos + 300) : compact.slice(0, 900);
-      rating = first(/★\s*([0-9]+(?:\.[0-9]+)?)/, topArea);
-      if (!rating) rating = first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+(?:전체|전략)(?:\s|$)/, topArea);
-      if (!rating) rating = first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+전체\s*\d+위/, topArea);
+      rating = first(/★\s*([0-9]+(?:\.[0-9]+)?)/, topArea) || first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+(?:전체|전략)(?:\s|$)/, topArea) || first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+전체\s*\d+위/, topArea);
     }
-
-    let age = first(/(?:사용\s*)?연령\s*([0-9]+세\s*이상)/, core);
-    if (!age) age = first(/추천\s*연령\s*([0-9]+세\s*이상)/, core);
-
-    let bestPlayers = '';
-    let recommendedPlayers = '';
+    let age = first(/(?:사용\s*)?연령\s*([0-9]+세\s*이상)/, core) || first(/추천\s*연령\s*([0-9]+세\s*이상)/, core);
+    let bestPlayers = '', recommendedPlayers = '';
     let recommendation = core.match(/베스트\s*\/\s*추천\s*([0-9]+인(?:\s*,\s*[0-9]+인)*)\s*\/\s*([0-9]+인(?:\s*,\s*[0-9]+인)*)/);
-    if (recommendation) {
-      bestPlayers = clean(recommendation[1]);
-      recommendedPlayers = clean(recommendation[2]);
-    } else {
+    if (recommendation) { bestPlayers = clean(recommendation[1]); recommendedPlayers = clean(recommendation[2]); }
+    else {
       recommendation = core.match(/베스트\s*:?\s*([^,\)\/]{1,40}).*?추천\s*:?\s*([^\)\/]{1,40})/);
       if (recommendation) { bestPlayers = clean(recommendation[1]); recommendedPlayers = clean(recommendation[2]); }
     }
-
     let image = '';
     if (doc) {
-      const images = [...doc.querySelectorAll('img')];
-      const normalizedTitle = title.replace(/\s+/g, '');
+      const images = [...doc.querySelectorAll('img')], normalizedTitle = title.replace(/\s+/g, '');
       let candidate = images.find(img => clean(img.alt).replace(/\s+/g, '').includes(normalizedTitle) && /boardlife\.co\.kr/.test(img.src || ''));
       if (!candidate) candidate = images.find(img => /img\.boardlife\.co\.kr\/data\/photo\//.test(img.src || ''));
       image = candidate ? candidate.src : '';
     }
     if (!image && html) image = first(/(https?:\/\/img\.boardlife\.co\.kr\/data\/photo\/[^"'<>\s]+)/i, html).replace(/&amp;/g, '&');
-
     const urlInClipboard = first(/(https?:\/\/(?:www\.)?boardlife\.co\.kr\/game\/\d+)/i, html + ' ' + plain);
     if (!sourceUrl.value && urlInClipboard) sourceUrl.value = urlInClipboard;
 
-    set('piTitle', title);
-    set('piSubtitle', heading.subtitle);
-    set('piYear', heading.year || first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, core));
-    set('piRating', rating);
-    set('piDifficulty', difficulty);
-    set('piAge', age);
-    set('piMinPlayers', players ? players[1] : '');
-    set('piMaxPlayers', players ? players[2] : '');
-    set('piBestPlayers', bestPlayers);
-    set('piRecommendedPlayers', recommendedPlayers);
-    set('piMinTime', minTime);
-    set('piMaxTime', maxTime);
-    set('piImage', image);
-
+    set('piTitle', title); set('piSubtitle', heading.subtitle); set('piYear', heading.year || first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, core));
+    set('piRating', rating); set('piDifficulty', difficulty); set('piAge', age); set('piMinPlayers', players ? players[1] : ''); set('piMaxPlayers', players ? players[2] : '');
+    set('piBestPlayers', bestPlayers); set('piRecommendedPlayers', recommendedPlayers); set('piMinTime', minTime); set('piMaxTime', maxTime); set('piImage', image);
     const categoryIndex = core.indexOf('카테고리');
-    const categoryChunk = categoryIndex >= 0 ? core.slice(categoryIndex, categoryIndex + 180) : '';
-    const category = normalizeCategory(categoryChunk);
+    const category = normalizeCategory(categoryIndex >= 0 ? core.slice(categoryIndex, categoryIndex + 180) : '');
     set('piCategory', category);
-
-    let description = '';
     const descMatch = core.match(/(?:게임\s*설명\s*)?([^]{20,1000}?)(?=커뮤니티\s*투표|디자이너|카테고리)/);
-    if (descMatch && !/인원\s*\d/.test(descMatch[1])) description = clean(descMatch[1]).slice(0, 1000);
-    set('piDescription', description);
+    if (descMatch && !/인원\s*\d/.test(descMatch[1])) set('piDescription', clean(descMatch[1]).slice(0, 1000));
 
-    preview.classList.remove('hidden');
-    box.textContent = '✓ 읽었습니다. 아래 입력값을 확인하고 필요하면 수정하세요.';
-    box.classList.add('loaded');
-
+    preview.classList.remove('hidden'); box.textContent = '✓ 읽었습니다. 아래 입력값을 확인하고 필요하면 수정하세요.'; box.classList.add('loaded');
     const facts = [];
-    if (players) facts.push(`${players[1]}~${players[2]}명`);
-    if (minTime) facts.push(minTime === maxTime ? `${minTime}분` : `${minTime}~${maxTime}분`);
-    if (difficulty) facts.push(`웨이트 ${difficulty}`);
-    if (rating) facts.push(`평점 ${rating}`);
-    if (age) facts.push(age);
-    if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`);
-    if (category) facts.push(`카테고리 ${category}`);
+    if (players) facts.push(`${players[1]}~${players[2]}명`); if (minTime) facts.push(minTime === maxTime ? `${minTime}분` : `${minTime}~${maxTime}분`); if (difficulty) facts.push(`웨이트 ${difficulty}`); if (rating) facts.push(`평점 ${rating}`); if (age) facts.push(age); if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`); if (category) facts.push(`카테고리 ${category}`);
     status.innerHTML = `<b>✓ ${escapeHtml(title)}</b>${facts.length ? ' · ' + facts.map(escapeHtml).join(' · ') : ''}`;
-    importReady = true;
-    await checkDuplicate();
-    syncSubmit();
+    importReady = true; await checkDuplicate(); syncSubmit();
   });
 
   if (enrichGameId && sourceUrl.value) checkDuplicate();
