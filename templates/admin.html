@@ -4,22 +4,22 @@
 <main class="wrap panel-page">
   <div class="topline"><a href="{{url_for('index')}}" class="back">← 공개 목록</a><a href="{{url_for('admin_logout')}}">로그아웃</a></div>
 
-  <section class="panel">
+  <section class="panel paste-panel">
     <div class="section-heading">
-      <div><h1>BoardLife에서 게임 추가</h1><p>URL 자동 가져오기가 403으로 막히면 아래 복사 방식으로 추가하세요.</p></div>
+      <div>
+        <h1>📋 BoardLife 페이지 복사로 게임 추가</h1>
+        <p>BoardLife의 서버 자동 접근 차단과 관계없이, 브라우저에 보이는 게임 정보를 복사해서 등록합니다.</p>
+      </div>
       <a class="button" href="{{url_for('new_game')}}">+ 직접 추가</a>
     </div>
-    <form method="post" class="import-form">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <input type="url" name="url" placeholder="https://boardlife.co.kr/game/19110" required>
-      <input type="text" name="location" value="{{ default_location }}" placeholder="보유 장소" required>
-      <button class="primary">URL 자동 가져오기</button>
-    </form>
-  </section>
 
-  <section class="panel paste-panel">
-    <h2>📋 BoardLife 페이지 복사로 가져오기</h2>
-    <p>BoardLife 게임 상세 페이지에서 <b>Ctrl+A → Ctrl+C</b> 후 아래 상자에 붙여넣으세요.</p>
+    <ol class="import-steps">
+      <li>BoardLife에서 등록할 게임의 상세 페이지를 엽니다.</li>
+      <li><b>Ctrl+A → Ctrl+C</b>로 페이지 전체를 복사합니다. (Mac: ⌘A → ⌘C)</li>
+      <li>아래 큰 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣습니다.</li>
+      <li>자동으로 채워진 게임명·인원·시간·웨이트 등을 확인하고 필요하면 수정합니다.</li>
+      <li><b>확인한 게임 추가</b>를 누릅니다.</li>
+    </ol>
 
     <form method="post" action="{{ url_for('new_game') }}" id="pasteImportForm" class="paste-import-form">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
