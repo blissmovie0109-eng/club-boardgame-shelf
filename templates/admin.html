@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}게임 관리 · {{ club_name }}{% endblock %}
 {% block content %}
+{% set new_parent_id = request.args.get('parent_id') %}
+{% set new_parent_title = request.args.get('parent_title', '') %}
+{% set new_parent_location = request.args.get('parent_location', '') %}
 <main class="wrap panel-page">
   <div class="topline"><a href="{{url_for('index')}}" class="back">← 공개 목록</a><a href="{{url_for('admin_logout')}}">로그아웃</a></div>
 
@@ -45,6 +48,10 @@
         <span class="enrich-kicker">✨ 정보 보강 모드</span>
         <h1>{{ enrich_game.title }} 정보 채우기</h1>
         <p>이 게임의 BoardLife 상세페이지를 열어 Ctrl+A → Ctrl+C 후 아래에 붙여넣으세요. 기존 정보는 유지하고 새로 읽힌 값만 보강합니다.</p>
+        {% elif new_parent_id %}
+        <span class="enrich-kicker">🧩 확장 추가 모드</span>
+        <h1>{{ new_parent_title }} 확장 추가</h1>
+        <p>추가할 확장의 BoardLife 상세페이지를 복사해 붙여넣으면 <b>{{ new_parent_title }}</b>의 확장으로 자동 연결됩니다.</p>
         {% else %}
         <h1>📋 BoardLife 상세페이지로 한 게임 등록</h1>
         <p>게임 하나를 상세하게 등록할 때 사용합니다. BoardLife 상세페이지 전체를 복사해 붙여넣으세요.</p>
@@ -52,6 +59,7 @@
       </div>
       <div class="heading-actions">
         {% if enrich_game %}<a class="button" href="{{ url_for('admin', incomplete=1) }}">보강 취소</a>{% endif %}
+        {% if new_parent_id %}<a class="button" href="{{ url_for('edit_game', game_id=new_parent_id) }}">확장 추가 취소</a>{% endif %}
         <a class="button" href="{{url_for('new_game')}}">+ 직접 추가</a>
       </div>
     </div>
@@ -66,30 +74,31 @@
 
     <form method="post" action="{% if enrich_game %}{{ url_for('enrich_game', game_id=enrich_game.id) }}{% else %}{{ url_for('new_game') }}{% endif %}" id="pasteImportForm" class="paste-import-form">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="parent_game_id" value="{% if enrich_game %}{{ enrich_game.parent_game_id or '' }}{% elif new_parent_id %}{{ new_parent_id }}{% endif %}">
       <div class="paste-top-row">
         <label>BoardLife 주소
           <input id="pasteSourceUrl" name="source_url" type="url" value="{{ enrich_game.source_url if enrich_game and enrich_game.source_url and enrich_game.source_url.startswith('http') else '' }}" placeholder="https://boardlife.co.kr/game/19110" required>
         </label>
         <label>보유 장소
-          <input name="location" value="{{ enrich_game.location if enrich_game else default_location }}" placeholder="아지트" required>
+          <input name="location" value="{% if enrich_game %}{{ enrich_game.location }}{% elif new_parent_location %}{{ new_parent_location }}{% else %}{{ default_location }}{% endif %}" placeholder="아지트" required>
         </label>
       </div>
       <div id="duplicateStatus" class="duplicate-status hidden" aria-live="polite"></div>
 
-      <div id="boardlifePasteBox" class="boardlife-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 상세페이지 붙여넣기">{% if enrich_game %}{{ enrich_game.title }} 상세페이지를 여기에 Ctrl+V{% else %}여기를 클릭하고 Ctrl+V로 붙여넣으세요{% endif %}</div>
-      <div id="pasteStatus" class="paste-status muted">{% if enrich_game %}<b>{{ enrich_game.title }}</b>의 상세정보를 기다리고 있습니다.{% else %}아직 읽어온 게임이 없습니다.{% endif %}</div>
+      <div id="boardlifePasteBox" class="boardlife-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 상세페이지 붙여넣기">{% if enrich_game %}{{ enrich_game.title }} 상세페이지를 여기에 Ctrl+V{% elif new_parent_id %}추가할 확장 상세페이지를 여기에 Ctrl+V{% else %}여기를 클릭하고 Ctrl+V로 붙여넣으세요{% endif %}</div>
+      <div id="pasteStatus" class="paste-status muted">{% if enrich_game %}<b>{{ enrich_game.title }}</b>의 상세정보를 기다리고 있습니다.{% elif new_parent_id %}<b>{{ new_parent_title }}</b>에 연결할 확장 정보를 기다리고 있습니다.{% else %}아직 읽어온 게임이 없습니다.{% endif %}</div>
 
       <div id="pastePreview" class="edit-grid hidden">
         <label class="wide">게임명 <input name="title" id="piTitle" value="{{ enrich_game.title if enrich_game else '' }}" required></label>
         <label class="wide">영문/부제 <input name="subtitle" id="piSubtitle" value="{{ enrich_game.subtitle if enrich_game else '' }}"></label>
         <label>게임 종류
           <select name="game_type" id="piGameType">
-            <option value="base" {% if not enrich_game or enrich_game.game_type == 'base' %}selected{% endif %}>본판</option>
-            <option value="expansion" {% if enrich_game and enrich_game.game_type == 'expansion' %}selected{% endif %}>확장 — 랜덤 추천 제외</option>
+            <option value="base" {% if not enrich_game and not new_parent_id %}selected{% elif enrich_game and enrich_game.game_type == 'base' %}selected{% endif %}>본판</option>
+            <option value="expansion" {% if new_parent_id or (enrich_game and enrich_game.game_type == 'expansion') %}selected{% endif %}>확장 — 랜덤 추천 제외</option>
             <option value="standalone_expansion" {% if enrich_game and enrich_game.game_type == 'standalone_expansion' %}selected{% endif %}>독립형 확장 — 랜덤 추천 포함</option>
           </select>
         </label>
-        <label>본판 게임명 <input name="parent_title" id="piParentTitle" value="{{ enrich_game.parent_title if enrich_game else '' }}" placeholder="확장일 때 예: 아크 노바"></label>
+        <label>본판 게임명 <input name="parent_title" id="piParentTitle" value="{% if enrich_game %}{{ enrich_game.parent_title }}{% elif new_parent_id %}{{ new_parent_title }}{% endif %}" {% if new_parent_id %}readonly{% endif %} placeholder="확장일 때 예: 아크 노바"></label>
         <label>출시연도 <input name="year" id="piYear" type="number" value="{{ enrich_game.year if enrich_game and enrich_game.year else '' }}"></label>
         <label>평점 <input name="rating" id="piRating" type="number" step="0.1" min="0" max="10" value="{{ enrich_game.rating if enrich_game and enrich_game.rating is not none else '' }}"></label>
         <label>웨이트 <input name="difficulty" id="piDifficulty" type="number" step="0.01" min="0" max="5" value="{{ enrich_game.difficulty if enrich_game and enrich_game.difficulty is not none else '' }}"></label>
@@ -112,7 +121,7 @@
       </div>
 
       <input type="hidden" name="material_url" value="{{ enrich_game.material_url if enrich_game else '' }}">
-      <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>{% if enrich_game %}이 게임 정보 업데이트{% else %}확인한 게임 추가{% endif %}</button>
+      <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>{% if enrich_game %}이 게임 정보 업데이트{% elif new_parent_id %}이 확장 추가{% else %}확인한 게임 추가{% endif %}</button>
     </form>
   </section>
 
