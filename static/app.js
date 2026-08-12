@@ -1,111 +1,190 @@
 const search = document.querySelector('#search');
-const cards = [...document.querySelectorAll('.collection-card')];
 const visibleCount = document.querySelector('#visibleCount');
 const empty = document.querySelector('#empty');
 const locationFilter = document.querySelector('#locationFilter');
 const weightFilter = document.querySelector('#weightFilter');
 const randomPick = document.querySelector('#randomPick');
-const randomResult = document.querySelector('#randomResult');
 const grid = document.querySelector('#grid');
+const pager = document.querySelector('#pager');
+const prevPage = document.querySelector('#prevPage');
+const nextPage = document.querySelector('#nextPage');
+const pageInfo = document.querySelector('#pageInfo');
+const todayPick = document.querySelector('#todayPick');
+const todayPickCover = document.querySelector('#todayPickCover');
+const todayPickTitle = document.querySelector('#todayPickTitle');
+const todayPickSubtitle = document.querySelector('#todayPickSubtitle');
+const todayPickFacts = document.querySelector('#todayPickFacts');
+const todayPickActions = document.querySelector('#todayPickActions');
+
 let sortMode = 'weight';
 let players = 0;
+let page = 1;
+let pages = 1;
+let searchTimer = null;
+let requestToken = 0;
 
-function cardMatches(card) {
-  const q = (search?.value || '').trim().toLowerCase();
-  const location = (locationFilter?.value || '').trim().toLowerCase();
-  const weightBand = Number(weightFilter?.value || 0);
-  const titleOk = !q || card.dataset.title.includes(q);
-  const locationOk = !location || card.dataset.location === location;
-  const minp = Number(card.dataset.minp || 0);
-  const maxp = Number(card.dataset.maxp || 0);
-  const playerOk = !players || (players === 6 ? maxp >= 6 : minp > 0 && minp <= players && maxp >= players);
-  const weight = Number(card.dataset.weight || 0);
-  let weightOk = true;
-  if (weightBand) {
-    if (!weight) weightOk = false;
-    else if (weightBand === 4) weightOk = weight >= 4 && weight <= 5;
-    else weightOk = weight >= weightBand && weight < weightBand + 1;
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function queryParams(extra = {}) {
+  const params = new URLSearchParams();
+  const q = (search?.value || '').trim();
+  const location = locationFilter?.value || '';
+  const weight = weightFilter?.value || '';
+  if (q) params.set('q', q);
+  if (location) params.set('location', location);
+  if (weight) params.set('weight', weight);
+  if (players) params.set('players', String(players));
+  params.set('sort', sortMode);
+  Object.entries(extra).forEach(([key, value]) => params.set(key, String(value)));
+  return params;
+}
+
+function stars(weight) {
+  if (!weight) return '<span class="muted">정보 없음</span>';
+  const full = Math.max(0, Math.min(5, Math.floor(weight)));
+  let html = '<span class="stars">';
+  for (let i = 0; i < 5; i++) html += i < full ? '★' : '<span class="star-off">★</span>';
+  html += `</span> <strong>${Number(weight).toFixed(2)}</strong>`;
+  return html;
+}
+
+function actionLinks(game) {
+  const links = [];
+  if (game.material_url) links.push(`<a class="material-btn" href="${escapeHtml(game.material_url)}" target="_blank" rel="noopener">📄 자료</a>`);
+  if (game.video_url) links.push(`<a class="video-btn" href="${escapeHtml(game.video_url)}" target="_blank" rel="noopener">🎬 영상</a>`);
+  if (game.source_url?.startsWith('http')) links.push(`<a class="info-btn" href="${escapeHtml(game.source_url)}" target="_blank" rel="noopener">🔎 정보</a>`);
+  return links.join('');
+}
+
+function cardHtml(game) {
+  const title = escapeHtml(game.title);
+  const image = game.image_url
+    ? `<img src="${escapeHtml(game.image_url)}" alt="${title}" loading="lazy" referrerpolicy="no-referrer">`
+    : '<div class="cover-placeholder">🎲</div>';
+  const cover = game.source_url?.startsWith('http')
+    ? `<a class="cover-link" href="${escapeHtml(game.source_url)}" target="_blank" rel="noopener"><div class="collection-cover">${image}</div></a>`
+    : `<div class="collection-cover">${image}</div>`;
+  const playersText = game.min_players
+    ? `${game.min_players}${game.max_players && game.max_players !== game.min_players ? `~${game.max_players}` : ''}명`
+    : '정보 없음';
+  const timeText = game.min_time
+    ? `${game.min_time}${game.max_time && game.max_time !== game.min_time ? `~${game.max_time}` : ''}분`
+    : '';
+  const actions = actionLinks(game);
+  return `<article class="collection-card" data-game-id="${game.id}">
+    ${cover}
+    <div class="collection-body">
+      <h2>${title}</h2>
+      ${game.category ? `<div class="category-row"><span class="tag">${escapeHtml(game.category)}</span></div>` : ''}
+      <div class="info-line">⚖ <b>웨이트:</b> ${stars(game.difficulty)}</div>
+      <div class="info-line">👥 <b>인원:</b> ${playersText}${game.best_players ? ` <span class="muted">(베스트: ${escapeHtml(game.best_players)})</span>` : ''}</div>
+      ${game.recommended_players ? `<div class="info-line">👍 <b>추천:</b> ${escapeHtml(game.recommended_players)}</div>` : ''}
+      ${timeText ? `<div class="info-line">⏱ <b>시간:</b> ${timeText}</div>` : ''}
+      <div class="info-line location-line">📍 <b>보유 장소:</b> <span class="location-pill">${escapeHtml(game.location || '미지정')}</span></div>
+      ${game.description ? `<details class="game-description"><summary>게임 설명</summary><p>${escapeHtml(game.description)}</p></details>` : ''}
+      ${actions ? `<div class="card-actions multi-actions">${actions}</div>` : ''}
+    </div>
+  </article>`;
+}
+
+async function loadGames({ resetPage = false } = {}) {
+  if (resetPage) page = 1;
+  const token = ++requestToken;
+  grid?.classList.add('is-loading');
+  try {
+    const response = await fetch(`/api/games?${queryParams({ page, per_page: 48 })}`);
+    if (!response.ok) throw new Error('목록을 불러오지 못했습니다.');
+    const data = await response.json();
+    if (token !== requestToken) return;
+    page = data.page;
+    pages = data.pages;
+    if (visibleCount) visibleCount.textContent = data.total;
+    if (grid) grid.innerHTML = data.games.map(cardHtml).join('');
+    if (empty) empty.classList.toggle('hidden', data.total !== 0);
+    if (pager) pager.classList.toggle('hidden', data.total === 0 || pages <= 1);
+    if (pageInfo) pageInfo.textContent = `${page} / ${pages}`;
+    if (prevPage) prevPage.disabled = page <= 1;
+    if (nextPage) nextPage.disabled = page >= pages;
+  } catch (error) {
+    if (grid) grid.innerHTML = `<div class="load-error">${escapeHtml(error.message)}</div>`;
+  } finally {
+    grid?.classList.remove('is-loading');
   }
-  return titleOk && locationOk && playerOk && weightOk;
 }
 
-function clearRandomHighlight() {
-  cards.forEach(card => card.classList.remove('random-selected'));
+function showTodayPick(game) {
+  if (!todayPick || !game) return;
+  todayPickCover.innerHTML = game.image_url
+    ? `<img src="${escapeHtml(game.image_url)}" alt="${escapeHtml(game.title)}" referrerpolicy="no-referrer">`
+    : '<div class="today-pick-placeholder">🎲</div>';
+  todayPickTitle.textContent = game.title;
+  todayPickSubtitle.textContent = [game.subtitle, game.year ? `${game.year}년` : ''].filter(Boolean).join(' · ');
+  const facts = [];
+  if (game.min_players) facts.push(`👥 ${game.min_players}${game.max_players && game.max_players !== game.min_players ? `~${game.max_players}` : ''}명`);
+  if (game.difficulty) facts.push(`⚖ 웨이트 ${Number(game.difficulty).toFixed(2)}`);
+  if (game.min_time) facts.push(`⏱ ${game.min_time}${game.max_time && game.max_time !== game.min_time ? `~${game.max_time}` : ''}분`);
+  if (game.location) facts.push(`📍 ${game.location}`);
+  todayPickFacts.innerHTML = facts.map(f => `<span>${escapeHtml(f)}</span>`).join('');
+  todayPickActions.innerHTML = actionLinks(game) || '<span class="muted">등록된 링크가 없습니다.</span>';
+  todayPick.classList.remove('hidden');
+  todayPick.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function applyFilters() {
-  let shown = 0;
-  cards.forEach(card => {
-    const ok = cardMatches(card);
-    card.classList.toggle('hidden', !ok);
-    if (ok) shown++;
-  });
-  if (visibleCount) visibleCount.textContent = shown;
-  if (empty) empty.classList.toggle('hidden', shown !== 0);
-  clearRandomHighlight();
-  if (randomResult) randomResult.classList.add('hidden');
-}
-
-function applySort() {
-  if (!grid) return;
-  const sorted = [...cards].sort((a, b) => {
-    if (sortMode === 'name') return a.dataset.title.localeCompare(b.dataset.title, 'ko');
-    const aw = Number(a.dataset.weight || 99);
-    const bw = Number(b.dataset.weight || 99);
-    if (aw !== bw) return aw - bw;
-    return a.dataset.title.localeCompare(b.dataset.title, 'ko');
-  });
-  sorted.forEach(card => grid.appendChild(card));
-}
-
-function pickRandomGame() {
-  const candidates = cards.filter(card => !card.classList.contains('hidden') && cardMatches(card));
-  clearRandomHighlight();
-
-  if (!candidates.length) {
-    if (randomResult) {
-      randomResult.textContent = '조건에 맞는 게임이 없어요. 인원이나 웨이트 조건을 조금 넓혀보세요.';
-      randomResult.classList.remove('hidden');
+async function pickRandomGame() {
+  if (!randomPick) return;
+  randomPick.disabled = true;
+  randomPick.classList.add('is-spinning');
+  try {
+    const params = queryParams();
+    params.delete('sort');
+    const response = await fetch(`/api/games/random?${params}`);
+    if (!response.ok) throw new Error('랜덤 게임을 고르지 못했습니다.');
+    const data = await response.json();
+    if (!data.game) {
+      todayPick?.classList.remove('hidden');
+      todayPickCover.innerHTML = '<div class="today-pick-placeholder">🤔</div>';
+      todayPickTitle.textContent = '조건에 맞는 게임이 없어요';
+      todayPickSubtitle.textContent = '인원이나 웨이트 조건을 조금 넓혀보세요.';
+      todayPickFacts.innerHTML = '';
+      todayPickActions.innerHTML = '';
+      return;
     }
-    return;
+    showTodayPick(data.game);
+  } finally {
+    randomPick.disabled = false;
+    randomPick.classList.remove('is-spinning');
   }
-
-  const picked = candidates[Math.floor(Math.random() * candidates.length)];
-  picked.classList.add('random-selected');
-  const title = picked.querySelector('h2')?.textContent?.trim() || '게임';
-  const weight = Number(picked.dataset.weight || 0);
-  const minp = picked.dataset.minp;
-  const maxp = picked.dataset.maxp;
-
-  if (randomResult) {
-    const facts = [];
-    if (minp && maxp) facts.push(`${minp}${minp !== maxp ? `~${maxp}` : ''}명`);
-    if (weight) facts.push(`웨이트 ${weight.toFixed(2)}`);
-    randomResult.innerHTML = `🎲 오늘의 선택: <b>${title}</b>${facts.length ? ` · ${facts.join(' · ')}` : ''}`;
-    randomResult.classList.remove('hidden');
-  }
-
-  picked.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-search?.addEventListener('input', applyFilters);
-locationFilter?.addEventListener('change', applyFilters);
-weightFilter?.addEventListener('change', applyFilters);
+search?.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadGames({ resetPage: true }), 250);
+});
+locationFilter?.addEventListener('change', () => loadGames({ resetPage: true }));
+weightFilter?.addEventListener('change', () => loadGames({ resetPage: true }));
 randomPick?.addEventListener('click', pickRandomGame);
+prevPage?.addEventListener('click', () => { if (page > 1) { page--; loadGames(); window.scrollTo({ top: 0, behavior: 'smooth' }); } });
+nextPage?.addEventListener('click', () => { if (page < pages) { page++; loadGames(); window.scrollTo({ top: 0, behavior: 'smooth' }); } });
 
 document.querySelectorAll('.sort-btn').forEach(btn => btn.addEventListener('click', () => {
   document.querySelectorAll('.sort-btn').forEach(x => x.classList.remove('active'));
   btn.classList.add('active');
   sortMode = btn.dataset.sort;
-  applySort();
+  loadGames({ resetPage: true });
 }));
 
 document.querySelectorAll('#playerFilters .filter-btn').forEach(btn => btn.addEventListener('click', () => {
   document.querySelectorAll('#playerFilters .filter-btn').forEach(x => x.classList.remove('active'));
   btn.classList.add('active');
   players = Number(btn.dataset.players || 0);
-  applyFilters();
+  loadGames({ resetPage: true });
 }));
 
-applySort();
-applyFilters();
+loadGames();
