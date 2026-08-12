@@ -3,10 +3,49 @@
 {% block content %}
 <main class="wrap narrow panel-page">
   <a href="{{url_for('admin')}}" class="back">← 관리자</a>
+
+  {% if game.game_type == 'base' %}
+  <section class="panel expansion-manage-panel">
+    <div class="section-heading expansion-heading">
+      <div>
+        <span class="enrich-kicker">🧩 확장 관리</span>
+        <h2>{{ game.title }}의 확장</h2>
+        <p>확장은 공개 메인 목록에 따로 나오지 않고, 회원이 이 본판을 눌렀을 때 함께 표시됩니다.</p>
+      </div>
+      <a class="primary expansion-add-button" href="{{ url_for('new_game', parent_id=game.id) }}">+ 이 게임의 확장 추가</a>
+    </div>
+    {% if expansions %}
+    <div class="linked-expansion-list">
+      {% for expansion in expansions %}
+      <div class="linked-expansion-item">
+        {% if expansion.image_url %}<img src="{{ expansion.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="mini-placeholder">🧩</div>{% endif %}
+        <div class="grow">
+          <b>{{ expansion.title }}</b>
+          <small>{% if expansion.game_type == 'standalone_expansion' %}독립형 확장 · 랜덤 추천 포함{% else %}확장 · 랜덤 추천 제외{% endif %}</small>
+        </div>
+        <a class="button" href="{{ url_for('edit_game', game_id=expansion.id) }}">수정</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-expansion-state">아직 연결된 확장이 없습니다. 위 버튼으로 바로 추가할 수 있어요.</div>
+    {% endif %}
+  </section>
+  {% elif parent_game %}
+  <section class="panel parent-summary-panel">
+    <span class="enrich-kicker">🧩 연결된 본판</span>
+    <div class="parent-summary-row">
+      <div><strong>{{ parent_game.title }}</strong><small>이 확장은 해당 본판 상세페이지에서 함께 표시됩니다.</small></div>
+      <a class="button" href="{{ url_for('edit_game', game_id=parent_game.id) }}">본판 수정으로 이동</a>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="panel">
     <h1>{{game.title}} 수정</h1>
     <form method="post" class="edit-grid">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="parent_game_id" value="{{ game.parent_game_id or '' }}">
       <label>게임명<input name="title" value="{{game.title}}" required></label>
       <label>보유 장소<input name="location" value="{{game.location or default_location}}" placeholder="아지트" required></label>
       <label>게임 종류
@@ -16,7 +55,7 @@
           <option value="standalone_expansion" {% if game.game_type == 'standalone_expansion' %}selected{% endif %}>독립형 확장 — 랜덤 추천 포함</option>
         </select>
       </label>
-      <label>본판 게임명<input name="parent_title" value="{{game.parent_title or ''}}" placeholder="확장일 때 입력"></label>
+      <label>본판 게임명<input name="parent_title" value="{{game.parent_title or ''}}" {% if parent_game %}readonly{% endif %} placeholder="확장일 때 입력"></label>
       <label>영문/부제<input name="subtitle" value="{{game.subtitle or ''}}"></label>
       <label>카테고리<input name="category" value="{{game.category or ''}}" list="categoryOptions"><datalist id="categoryOptions"><option value="전략"><option value="추상"><option value="컬렉터블"><option value="가족"><option value="어린이"><option value="파티"><option value="테마"><option value="워게임"><option value="머더미스터리"></datalist></label>
       <label class="wide">이미지 URL<input name="image_url" type="url" value="{{game.image_url or ''}}"></label>
