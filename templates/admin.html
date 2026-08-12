@@ -17,7 +17,7 @@
       <li>BoardLife에서 등록할 게임의 상세 페이지를 엽니다.</li>
       <li><b>Ctrl+A → Ctrl+C</b>로 페이지 전체를 복사합니다. (Mac: ⌘A → ⌘C)</li>
       <li>아래 큰 상자를 클릭하고 <b>Ctrl+V</b>로 붙여넣습니다.</li>
-      <li>자동으로 채워진 게임명·인원·시간·웨이트 등을 확인하고 필요하면 수정합니다.</li>
+      <li>자동으로 채워진 게임명·인원·시간·웨이트·평점·연령·베스트/추천 등을 확인하고 필요하면 수정합니다.</li>
       <li><b>확인한 게임 추가</b>를 누릅니다.</li>
     </ol>
 
@@ -37,24 +37,24 @@
 
       <div id="pastePreview" class="edit-grid hidden">
         <label class="wide">게임명 <input name="title" id="piTitle" required></label>
+        <label class="wide">영문/부제 <input name="subtitle" id="piSubtitle"></label>
         <label>출시연도 <input name="year" id="piYear" type="number"></label>
+        <label>평점 <input name="rating" id="piRating" type="number" step="0.1" min="0" max="10"></label>
         <label>웨이트 <input name="difficulty" id="piDifficulty" type="number" step="0.01" min="0" max="5"></label>
+        <label>연령 <input name="age" id="piAge"></label>
         <label>최소 인원 <input name="min_players" id="piMinPlayers" type="number" min="1"></label>
         <label>최대 인원 <input name="max_players" id="piMaxPlayers" type="number" min="1"></label>
+        <label>베스트 인원 <input name="best_players" id="piBestPlayers" placeholder="예: 3인"></label>
+        <label>추천 인원 <input name="recommended_players" id="piRecommendedPlayers" placeholder="예: 2인"></label>
         <label>최소 시간 <input name="min_time" id="piMinTime" type="number" min="1"></label>
         <label>최대 시간 <input name="max_time" id="piMaxTime" type="number" min="1"></label>
-        <label>평점 <input name="rating" id="piRating" type="number" step="0.1" min="0" max="10"></label>
-        <label>연령 <input name="age" id="piAge"></label>
         <label class="wide">이미지 URL <input name="image_url" id="piImage" type="url"></label>
-        <label class="wide">영문/부제 <input name="subtitle" id="piSubtitle"></label>
         <label class="wide">카테고리 <input name="category" id="piCategory"></label>
         <label class="wide">게임 설명 <textarea name="description" id="piDescription" rows="4"></textarea></label>
       </div>
 
       <input type="hidden" name="video_url" value="">
       <input type="hidden" name="material_url" value="">
-      <input type="hidden" name="best_players" id="piBestPlayers">
-      <input type="hidden" name="recommended_players" id="piRecommendedPlayers">
 
       <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>확인한 게임 추가</button>
     </form>
@@ -87,6 +87,7 @@
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value || ''; };
   const clean = s => (s || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
   const first = (re, text, group=1) => { const m = text.match(re); return m ? clean(m[group]) : ''; };
+  const rangeRe = '[-~–—]';
 
   function findMainTitle(doc, plain) {
     if (doc) {
@@ -97,14 +98,58 @@
       if (sensible) return sensible;
     }
     const lines = (plain || '').split(/\r?\n/).map(clean).filter(Boolean);
+    const infoIndex = lines.findIndex(t => /인원|시간|연령/.test(t));
+    if (infoIndex > 0) {
+      for (let i = infoIndex - 1; i >= Math.max(0, infoIndex - 12); i--) {
+        if (lines[i].length >= 2 && lines[i].length < 120 && !/공유|편집|구매하기|게시글|전체|전략/.test(lines[i]) && !/^★?\s*\d/.test(lines[i])) {
+          const next = lines[i + 1] || '';
+          if (/(?:19|20)\d{2}년/.test(next) || /^[A-Za-z]/.test(next)) return lines[i].replace(/\s*보드게임$/, '').trim();
+        }
+      }
+    }
     const ratingIndex = lines.findIndex(t => t.includes('게임 평점 정보'));
     if (ratingIndex > 0) {
       for (let i = ratingIndex - 1; i >= Math.max(0, ratingIndex - 6); i--) {
         if (/보드게임$/.test(lines[i]) && lines[i].length < 160) return lines[i].replace(/\s*보드게임$/, '').trim();
       }
     }
-    const marker = plain.match(/([^\n]{2,150}?)\s*보드게임\s*\n?\s*게임 평점 정보/);
-    return marker ? clean(marker[1]) : '';
+    return '';
+  }
+
+  function findSubtitleAndYear(doc, plain, title) {
+    let subtitle = '';
+    let year = '';
+
+    if (doc) {
+      const h1 = [...doc.querySelectorAll('h1')].find(el => clean(el.textContent).replace(/\s*보드게임$/, '').trim() === title);
+      if (h1) {
+        const parentText = clean(h1.parentElement ? h1.parentElement.textContent : '');
+        const titlePos = parentText.indexOf(title);
+        const nearby = titlePos >= 0 ? parentText.slice(titlePos + title.length, titlePos + title.length + 500) : parentText.slice(0, 500);
+        const m = nearby.match(/([A-Za-z][A-Za-z0-9:'’!?,.()\-\s]{2,180}?)\s*((?:19|20)\d{2})년/);
+        if (m) {
+          subtitle = clean(m[1]);
+          year = m[2];
+        }
+      }
+    }
+
+    if (!subtitle || !year) {
+      const lines = (plain || '').split(/\r?\n/).map(clean).filter(Boolean);
+      const titleIndex = lines.findIndex(line => line.replace(/\s*보드게임$/, '').trim() === title);
+      if (titleIndex >= 0) {
+        for (let i = titleIndex + 1; i <= Math.min(lines.length - 1, titleIndex + 4); i++) {
+          const m = lines[i].match(/^(.+?)\s*((?:19|20)\d{2})년$/);
+          if (m && /[A-Za-z]/.test(m[1])) {
+            subtitle = clean(m[1]);
+            year = m[2];
+            break;
+          }
+        }
+      }
+    }
+
+    return { subtitle, year };
   }
 
   box.addEventListener('paste', event => {
@@ -122,17 +167,36 @@
     }
 
     const compact = clean(plain || (doc ? doc.body.innerText : ''));
-    const titleNeedle = title + ' 보드게임';
-    const start = compact.indexOf(titleNeedle);
-    const core = start >= 0 ? compact.slice(start, start + 12000) : compact.slice(0, 12000);
+    const titlePos = compact.indexOf(title);
+    const core = titlePos >= 0 ? compact.slice(titlePos, titlePos + 12000) : compact.slice(0, 12000);
+    const heading = findSubtitleAndYear(doc, plain, title);
 
-    const year = first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, core);
-    const players = core.match(/인원\s*(\d+)\s*[-~]\s*(\d+)\s*명/);
-    const time = core.match(/플레이\s*시간\s*(\d+)\s*[-~]\s*(\d+)\s*분/);
+    const players = core.match(new RegExp('인원\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*명'));
+    const time = core.match(new RegExp('(?:플레이\\s*)?시간\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*분'));
     const difficulty = first(/난이도\s*([0-9]+(?:\.[0-9]+)?)/, core);
-    const rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
-    const age = first(/사용\s*연령\s*([0-9]+세\s*이상)/, core);
-    const recommendation = core.match(/베스트\s*:?\s*([^,\)]+).*?추천\s*:?\s*([^\)]+)/);
+
+    let rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
+    if (!rating) {
+      const topArea = titlePos >= 0 ? compact.slice(Math.max(0, titlePos - 400), titlePos + 300) : compact.slice(0, 700);
+      rating = first(/★\s*([0-9]+(?:\.[0-9]+)?)/, topArea);
+    }
+
+    let age = first(/(?:사용\s*)?연령\s*([0-9]+세\s*이상)/, core);
+    if (!age) age = first(/추천\s*연령\s*([0-9]+세\s*이상)/, core);
+
+    let bestPlayers = '';
+    let recommendedPlayers = '';
+    let recommendation = core.match(/베스트\s*\/\s*추천\s*([0-9]+인(?:\s*,\s*[0-9]+인)*)\s*\/\s*([0-9]+인(?:\s*,\s*[0-9]+인)*)/);
+    if (recommendation) {
+      bestPlayers = clean(recommendation[1]);
+      recommendedPlayers = clean(recommendation[2]);
+    } else {
+      recommendation = core.match(/베스트\s*:?\s*([^,\)\/]{1,40}).*?추천\s*:?\s*([^\)\/]{1,40})/);
+      if (recommendation) {
+        bestPlayers = clean(recommendation[1]);
+        recommendedPlayers = clean(recommendation[2]);
+      }
+    }
 
     let image = '';
     if (doc) {
@@ -148,30 +212,39 @@
     if (!sourceUrl.value && urlInClipboard) sourceUrl.value = urlInClipboard;
 
     set('piTitle', title);
-    set('piYear', year);
+    set('piSubtitle', heading.subtitle);
+    set('piYear', heading.year || first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, core));
+    set('piRating', rating);
     set('piDifficulty', difficulty);
+    set('piAge', age);
     set('piMinPlayers', players ? players[1] : '');
     set('piMaxPlayers', players ? players[2] : '');
+    set('piBestPlayers', bestPlayers);
+    set('piRecommendedPlayers', recommendedPlayers);
     set('piMinTime', time ? time[1] : '');
     set('piMaxTime', time ? time[2] : '');
-    set('piRating', rating);
-    set('piAge', age);
     set('piImage', image);
-    set('piBestPlayers', recommendation ? recommendation[1] : '');
-    set('piRecommendedPlayers', recommendation ? recommendation[2] : '');
 
     const category = first(/카테고리\s+([^\s]{1,50})/, core);
     set('piCategory', category);
 
-    let subtitle = '';
-    const sub = core.match(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*보드게임\\s+([A-Za-z][A-Za-z0-9:!?,.()\\-\\s]{2,120}?)\\s+(?:19|20)\\d{2}년'));
-    if (sub) subtitle = clean(sub[1]);
-    set('piSubtitle', subtitle);
+    let description = '';
+    const descMatch = core.match(/(?:게임\s*설명\s*)?([^]{20,1000}?)(?=커뮤니티\s*투표|디자이너|카테고리)/);
+    if (descMatch && !/인원\s*\d/.test(descMatch[1])) description = clean(descMatch[1]).slice(0, 1000);
+    set('piDescription', description);
 
     preview.classList.remove('hidden');
     box.textContent = '✓ 읽었습니다. 아래 입력값을 확인하고 필요하면 수정하세요.';
     box.classList.add('loaded');
-    status.innerHTML = `<b>✓ ${title}</b>${players ? ` · ${players[1]}~${players[2]}명` : ''}${difficulty ? ` · 웨이트 ${difficulty}` : ''}`;
+
+    const facts = [];
+    if (players) facts.push(`${players[1]}~${players[2]}명`);
+    if (time) facts.push(`${time[1]}~${time[2]}분`);
+    if (difficulty) facts.push(`웨이트 ${difficulty}`);
+    if (rating) facts.push(`평점 ${rating}`);
+    if (age) facts.push(age);
+    if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`);
+    status.innerHTML = `<b>✓ ${title}</b>${facts.length ? ' · ' + facts.join(' · ') : ''}`;
     submit.disabled = false;
   });
 })();
