@@ -11,6 +11,7 @@
     <div class="toolbar-left">
       <div class="sort-group"><strong>정렬:</strong><button class="sort-btn active" data-sort="weight">웨이트</button><button class="sort-btn" data-sort="name">이름순</button></div>
       <label class="collection-search"><input id="search" type="search" placeholder="게임 이름 검색"></label>
+      <div class="player-group" id="playerFilters"><strong>인원:</strong><button class="filter-btn active" data-players="0">전체</button>{% for n in [2,3,4,5,6] %}<button class="filter-btn" data-players="{{n}}">{{n}}인{% if n == 6 %}+{% endif %}</button>{% endfor %}</div>
     </div>
     <div class="toolbar-right">
       <label class="location-filter">보유 장소:
@@ -23,7 +24,7 @@
   {% if games %}
   <section class="collection-grid" id="grid">
     {% for g in games %}
-    <article class="collection-card" data-title="{{ (g.title ~ ' ' ~ (g.subtitle or ''))|lower }}" data-weight="{{ g.difficulty or 99 }}" data-location="{{ (g.location or '')|lower }}">
+    <article class="collection-card" data-title="{{ (g.title ~ ' ' ~ (g.subtitle or ''))|lower }}" data-weight="{{ g.difficulty or 99 }}" data-location="{{ (g.location or '')|lower }}" data-minp="{{ g.min_players or '' }}" data-maxp="{{ g.max_players or '' }}">
       {% if g.source_url and g.source_url.startswith('http') %}<a class="cover-link" href="{{ g.source_url }}" target="_blank" rel="noopener">{% endif %}
       <div class="collection-cover">{% if g.image_url %}<img src="{{ g.image_url }}" alt="{{ g.title }}" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="cover-placeholder">🎲</div>{% endif %}</div>
       {% if g.source_url and g.source_url.startswith('http') %}</a>{% endif %}
@@ -34,7 +35,12 @@
         <div class="info-line">👥 <b>인원:</b> {% if g.min_players %}{{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}~{{ g.max_players }}{% endif %}명{% else %}정보 없음{% endif %}{% if g.best_players %} <span class="muted">(베스트: {{ g.best_players }})</span>{% endif %}</div>
         {% if g.min_time %}<div class="info-line">⏱ <b>시간:</b> {{ g.min_time }}{% if g.max_time and g.max_time != g.min_time %}~{{ g.max_time }}{% endif %}분</div>{% endif %}
         <div class="info-line location-line">📍 <b>보유 장소:</b> <span class="location-pill">{{ g.location or '미지정' }}</span></div>
-        {% if g.source_url and g.source_url.startswith('http') %}<div class="card-actions"><a href="{{ g.source_url }}" target="_blank" rel="noopener">게임 정보</a></div>{% endif %}
+        {% if g.description %}<details class="game-description"><summary>게임 설명</summary><p>{{ g.description }}</p></details>{% endif %}
+        {% if g.source_url and g.source_url.startswith('http') or g.video_url or g.material_url %}<div class="card-actions multi-actions">
+          {% if g.material_url %}<a class="material-btn" href="{{ g.material_url }}" target="_blank" rel="noopener">📄 자료</a>{% endif %}
+          {% if g.video_url %}<a class="video-btn" href="{{ g.video_url }}" target="_blank" rel="noopener">🎬 영상</a>{% endif %}
+          {% if g.source_url and g.source_url.startswith('http') %}<a class="info-btn" href="{{ g.source_url }}" target="_blank" rel="noopener">🔎 정보</a>{% endif %}
+        </div>{% endif %}
       </div>
     </article>
     {% endfor %}
