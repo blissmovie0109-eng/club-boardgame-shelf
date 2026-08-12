@@ -49,6 +49,8 @@ class Game(Base):
     title: Mapped[str] = mapped_column(String(250), nullable=False)
     subtitle: Mapped[str] = mapped_column(String(250), default="")
     image_url: Mapped[str] = mapped_column(String(1000), default="")
+    video_url: Mapped[str] = mapped_column(String(1000), default="")
+    material_url: Mapped[str] = mapped_column(String(1000), default="")
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     min_players: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_players: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -88,13 +90,19 @@ def init_db():
     Base.metadata.create_all(engine)
     inspector = inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("games")}
-    if "location" not in columns:
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE games ADD COLUMN location VARCHAR(150) DEFAULT ''"))
-            connection.execute(
-                text("UPDATE games SET location = :location WHERE location IS NULL OR location = ''"),
-                {"location": DEFAULT_LOCATION},
-            )
+    additions = {
+        "location": "VARCHAR(150) DEFAULT ''",
+        "video_url": "VARCHAR(1000) DEFAULT ''",
+        "material_url": "VARCHAR(1000) DEFAULT ''",
+    }
+    with engine.begin() as connection:
+        for name, sql_type in additions.items():
+            if name not in columns:
+                connection.execute(text(f"ALTER TABLE games ADD COLUMN {name} {sql_type}"))
+        connection.execute(
+            text("UPDATE games SET location = :location WHERE location IS NULL OR location = ''"),
+            {"location": DEFAULT_LOCATION},
+        )
 
 
 def admin_required(fn):
@@ -233,31 +241,17 @@ def parse_boardlife(url):
         image_url = "https:" + image_url
 
     description = meta("description", "og:description")
-
-    players = extract_label_value(page_text, "인원", r"(\d+)\s*[-~]\s*(\d+)\s*명")
-    if not players:
-        players = first_match(r"인원\s*(\d+)\s*[-~]\s*(\d+)\s*명", page_text)
+    players = extract_label_value(page_text, "인원", r"(\d+)\s*[-~]\s*(\d+)\s*명") or first_match(r"인원\s*(\d+)\s*[-~]\s*(\d+)\s*명", page_text)
     min_players, max_players = (map(int, players) if players else (None, None))
-
-    playtime = extract_label_value(page_text, "플레이 시간", r"(\d+)\s*[-~]\s*(\d+)\s*분")
-    if not playtime:
-        playtime = first_match(r"플레이 시간\s*(\d+)\s*[-~]\s*(\d+)\s*분", page_text)
+    playtime = extract_label_value(page_text, "플레이 시간", r"(\d+)\s*[-~]\s*(\d+)\s*분") or first_match(r"플레이 시간\s*(\d+)\s*[-~]\s*(\d+)\s*분", page_text)
     min_time, max_time = (map(int, playtime) if playtime else (None, None))
 
-    difficulty = None
     difficulty_match = first_match(r"난이도\s*([0-9]+(?:\.[0-9]+)?)", page_text)
-    if difficulty_match:
-        difficulty = safe_float(difficulty_match[0])
-
-    rating = None
+    difficulty = safe_float(difficulty_match[0]) if difficulty_match else None
     rating_match = first_match(r"평점\s*([0-9]+(?:\.[0-9]+)?)", page_text)
-    if rating_match:
-        rating = safe_float(rating_match[0])
-
-    year = None
+    rating = safe_float(rating_match[0]) if rating_match else None
     year_match = first_match(r"(?:^|\s)((?:19|20)\d{2})년(?:\s|$)", page_text)
-    if year_match:
-        year = safe_int(year_match[0])
+    year = safe_int(year_match[0]) if year_match else None
 
     best_players = ""
     recommended_players = ""
@@ -266,15 +260,10 @@ def parse_boardlife(url):
         best_players = clean_text(recommendation[0])
         recommended_players = clean_text(recommendation[1])
 
-    age = ""
     age_match = first_match(r"사용 연령\s*([^\n]{1,30}?이상)", page_text)
-    if age_match:
-        age = clean_text(age_match[0])
-
-    category = ""
+    age = clean_text(age_match[0]) if age_match else ""
     category_match = first_match(r"카테고리\s*([^|]{1,100})", page_text)
-    if category_match:
-        category = clean_text(category_match[0])[:100]
+    category = clean_text(category_match[0])[:100] if category_match else ""
 
     if not title:
         raise ValueError("게임 제목을 찾지 못했습니다. 직접 추가 기능을 이용해 주세요.")
@@ -284,6 +273,8 @@ def parse_boardlife(url):
         "title": title,
         "subtitle": "",
         "image_url": image_url,
+        "video_url": "",
+        "material_url": "",
         "year": year,
         "min_players": min_players,
         "max_players": max_players,
@@ -296,7 +287,7 @@ def parse_boardlife(url):
         "age": age,
         "category": category,
         "location": DEFAULT_LOCATION,
-        "description": description[:500],
+        "description": description[:1000],
     }
 
 
@@ -305,6 +296,8 @@ def form_game_data(form):
         "title": clean_text(form.get("title")),
         "subtitle": clean_text(form.get("subtitle")),
         "image_url": clean_text(form.get("image_url")),
+        "video_url": clean_text(form.get("video_url")),
+        "material_url": clean_text(form.get("material_url")),
         "year": safe_int(clean_text(form.get("year"))),
         "min_players": safe_int(clean_text(form.get("min_players"))),
         "max_players": safe_int(clean_text(form.get("max_players"))),
@@ -385,7 +378,6 @@ def new_game():
         if not data["title"]:
             flash("게임 이름은 필수입니다.", "error")
             return render_template("new.html", game=data, default_location=DEFAULT_LOCATION)
-
         source_url = clean_text(request.form.get("source_url")) or f"manual:{uuid.uuid4()}"
         db = DBSession()
         try:
@@ -407,7 +399,6 @@ def edit_game(game_id):
     game = db.get(Game, game_id)
     if not game:
         abort(404)
-
     if request.method == "POST":
         data = form_game_data(request.form)
         if not data["title"]:
@@ -441,8 +432,4 @@ def health():
 init_db()
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", "5000")),
-        debug=os.environ.get("FLASK_DEBUG") == "1",
-    )
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=os.environ.get("FLASK_DEBUG") == "1")
