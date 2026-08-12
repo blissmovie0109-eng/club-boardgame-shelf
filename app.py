@@ -40,6 +40,11 @@ ALLOWED_CATEGORIES = (
     "워게임",
     "머더미스터리",
 )
+GAME_TYPES = {
+    "base": "본판",
+    "expansion": "확장",
+    "standalone_expansion": "독립형 확장",
+}
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://"):]
@@ -80,6 +85,8 @@ class Game(Base):
     age: Mapped[str] = mapped_column(String(100), default="")
     category: Mapped[str] = mapped_column(String(250), default="")
     location: Mapped[str] = mapped_column(String(150), default="")
+    game_type: Mapped[str] = mapped_column(String(30), default="base")
+    parent_title: Mapped[str] = mapped_column(String(250), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[str] = mapped_column(String(40), server_default=func.current_timestamp())
 
@@ -95,7 +102,7 @@ app.config.update(
 
 @app.context_processor
 def inject_site_settings():
-    return {"club_name": CLUB_NAME, "site_tagline": SITE_TAGLINE}
+    return {"club_name": CLUB_NAME, "site_tagline": SITE_TAGLINE, "game_types": GAME_TYPES}
 
 
 @app.teardown_appcontext
@@ -111,6 +118,8 @@ def init_db():
         "location": "VARCHAR(150) DEFAULT ''",
         "video_url": "VARCHAR(1000) DEFAULT ''",
         "material_url": "VARCHAR(1000) DEFAULT ''",
+        "game_type": "VARCHAR(30) DEFAULT 'base'",
+        "parent_title": "VARCHAR(250) DEFAULT ''",
     }
     with engine.begin() as connection:
         for name, sql_type in additions.items():
@@ -120,10 +129,13 @@ def init_db():
             text("UPDATE games SET location = :location WHERE location IS NULL OR location = ''"),
             {"location": DEFAULT_LOCATION},
         )
+        connection.execute(text("UPDATE games SET game_type = 'base' WHERE game_type IS NULL OR game_type = ''"))
+        connection.execute(text("UPDATE games SET parent_title = '' WHERE parent_title IS NULL"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_title ON games (title)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_location ON games (location)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_difficulty ON games (difficulty)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_players ON games (min_players, max_players)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_game_type ON games (game_type)"))
 
 
 def admin_required(fn):
@@ -173,6 +185,26 @@ def normalize_category(value):
         if category in category_text:
             return category
     return ""
+
+
+def normalize_game_type(value):
+    raw = clean_text(value).lower().replace(" ", "_")
+    aliases = {
+        "": "base",
+        "base": "base",
+        "본판": "base",
+        "기본": "base",
+        "expansion": "expansion",
+        "확장": "expansion",
+        "확장판": "expansion",
+        "standalone_expansion": "standalone_expansion",
+        "standalone": "standalone_expansion",
+        "독립형_확장": "standalone_expansion",
+        "독립형확장": "standalone_expansion",
+        "독립형_확장판": "standalone_expansion",
+        "독립형확장판": "standalone_expansion",
+    }
+    return aliases.get(raw, "base")
 
 
 def safe_float(value):
@@ -262,6 +294,8 @@ def form_game_data(form):
         "age": clean_text(form.get("age")),
         "category": normalize_category(form.get("category")),
         "location": clean_text(form.get("location")) or DEFAULT_LOCATION,
+        "game_type": normalize_game_type(form.get("game_type")),
+        "parent_title": clean_text(form.get("parent_title")),
         "description": clean_text(form.get("description")),
     }
 
@@ -326,6 +360,8 @@ def csv_game_data(row):
         "age": csv_value(row, "연령", "age"),
         "category": normalize_category(csv_value(row, "카테고리", "category")),
         "location": csv_value(row, "보유장소", "장소", "location") or DEFAULT_LOCATION,
+        "game_type": normalize_game_type(csv_value(row, "게임종류", "종류", "game_type", "game type")),
+        "parent_title": csv_value(row, "본판게임명", "본판", "parent_title", "parent title"),
         "description": csv_value(row, "게임설명", "설명", "description"),
     }
 
@@ -357,6 +393,7 @@ def game_conditions():
 
 
 def game_to_dict(game):
+    game_type = normalize_game_type(game.game_type)
     return {
         "id": game.id,
         "source_url": game.source_url or "",
@@ -377,6 +414,9 @@ def game_to_dict(game):
         "age": game.age or "",
         "category": normalize_category(game.category),
         "location": game.location or "",
+        "game_type": game_type,
+        "game_type_label": GAME_TYPES[game_type],
+        "parent_title": game.parent_title or "",
         "description": game.description or "",
     }
 
@@ -439,9 +479,10 @@ def api_games():
 def api_random_game():
     db = DBSession()
     conditions = game_conditions()
-    stmt = select(Game)
-    if conditions:
-        stmt = stmt.where(*conditions)
+    # 일반 확장은 본판이 없으면 플레이할 수 있으므로 오늘의 선택에서 제외합니다.
+    # 독립형 확장은 단독 플레이가 가능하므로 추천 대상에 포함합니다.
+    conditions.append(Game.game_type != "expansion")
+    stmt = select(Game).where(*conditions)
     game = db.scalar(stmt.order_by(func.random()).limit(1))
     if not game:
         return jsonify({"game": None})
@@ -515,9 +556,10 @@ def admin_duplicate_check():
 @admin_required
 def bulk_csv_template():
     headers = [
-        "BoardLife주소", "게임명", "영문/부제", "출시연도", "최소인원", "최대인원",
-        "베스트인원", "추천인원", "최소시간", "최대시간", "웨이트", "평점", "연령",
-        "카테고리", "보유장소", "이미지URL", "영상URL", "자료URL", "게임설명",
+        "BoardLife주소", "게임명", "영문/부제", "게임종류", "본판게임명", "출시연도",
+        "최소인원", "최대인원", "베스트인원", "추천인원", "최소시간", "최대시간",
+        "웨이트", "평점", "연령", "카테고리", "보유장소", "이미지URL", "영상URL",
+        "자료URL", "게임설명",
     ]
     output = io.StringIO()
     csv.writer(output).writerow(headers)
@@ -557,7 +599,7 @@ def bulk_csv_import():
         return redirect(url_for("admin"))
 
     db = DBSession()
-    existing_rows = db.execute(select(Game.source_url, Game.title, Game.location)).all()
+    existing_rows = db.execute(select(Game.source_url)).all()
     existing_sources = {canonical_source_url(row.source_url) for row in existing_rows if row.source_url}
     existing_boardlife_ids = {
         game_id
@@ -605,10 +647,11 @@ def bulk_csv_import():
             duplicates += 1
 
     db.commit()
+    suffix = f"추가 {added}개 · 중복 건너뜀 {duplicates}개 · 오류/빈 제목 {invalid}개"
     if processed >= MAX_CSV_ROWS:
-        flash(f"최대 {MAX_CSV_ROWS}행까지만 처리했습니다. 추가 {added}개 · 중복 {duplicates}개 · 오류/빈 제목 {invalid}개", "success")
+        flash(f"최대 {MAX_CSV_ROWS}행까지만 처리했습니다. {suffix}", "success")
     else:
-        flash(f"CSV 등록 완료: 추가 {added}개 · 중복 건너뜀 {duplicates}개 · 오류/빈 제목 {invalid}개", "success")
+        flash(f"CSV 등록 완료: {suffix}", "success")
     return redirect(url_for("admin"))
 
 
