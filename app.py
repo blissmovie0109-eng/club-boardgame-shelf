@@ -43,6 +43,7 @@ GAME_TYPES = {
     "expansion": "확장",
     "standalone_expansion": "독립형 확장",
 }
+EXPANSION_TYPES = ("expansion", "standalone_expansion")
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://"):]
@@ -85,6 +86,7 @@ class Game(Base):
     location: Mapped[str] = mapped_column(String(150), default="")
     game_type: Mapped[str] = mapped_column(String(30), default="base")
     parent_title: Mapped[str] = mapped_column(String(250), default="")
+    parent_game_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[str] = mapped_column(String(40), server_default=func.current_timestamp())
 
@@ -118,6 +120,7 @@ def init_db():
         "material_url": "VARCHAR(1000) DEFAULT ''",
         "game_type": "VARCHAR(30) DEFAULT 'base'",
         "parent_title": "VARCHAR(250) DEFAULT ''",
+        "parent_game_id": "INTEGER",
     }
     with engine.begin() as connection:
         for name, sql_type in additions.items():
@@ -134,6 +137,23 @@ def init_db():
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_difficulty ON games (difficulty)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_players ON games (min_players, max_players)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_game_type ON games (game_type)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_parent_game_id ON games (parent_game_id)"))
+        connection.execute(text("""
+            UPDATE games
+            SET parent_game_id = (
+                SELECT parent.id
+                FROM games AS parent
+                WHERE parent.id != games.id
+                  AND parent.game_type = 'base'
+                  AND lower(parent.title) = lower(games.parent_title)
+                ORDER BY parent.id
+                LIMIT 1
+            )
+            WHERE parent_game_id IS NULL
+              AND game_type IN ('expansion', 'standalone_expansion')
+              AND parent_title IS NOT NULL
+              AND parent_title != ''
+        """))
 
 
 def admin_required(fn):
@@ -294,8 +314,75 @@ def form_game_data(form):
         "location": clean_text(form.get("location")) or DEFAULT_LOCATION,
         "game_type": normalize_game_type(form.get("game_type")),
         "parent_title": clean_text(form.get("parent_title")),
+        "parent_game_id": safe_int(clean_text(form.get("parent_game_id"))),
         "description": clean_text(form.get("description")),
     }
+
+
+def link_parent_data(db, data, current_game_id=None):
+    if data.get("game_type") == "base":
+        data["parent_game_id"] = None
+        data["parent_title"] = ""
+        return data
+
+    parent = None
+    parent_id = data.get("parent_game_id")
+    if parent_id and parent_id != current_game_id:
+        candidate = db.get(Game, parent_id)
+        if candidate and normalize_game_type(candidate.game_type) == "base":
+            parent = candidate
+
+    parent_title = clean_text(data.get("parent_title"))
+    if parent is None and parent_title:
+        stmt = select(Game).where(
+            Game.game_type == "base",
+            func.lower(Game.title) == parent_title.lower(),
+        )
+        if current_game_id:
+            stmt = stmt.where(Game.id != current_game_id)
+        parent = db.scalar(stmt.order_by(Game.id).limit(1))
+
+    if parent:
+        data["parent_game_id"] = parent.id
+        data["parent_title"] = parent.title
+    else:
+        data["parent_game_id"] = None
+        data["parent_title"] = parent_title
+    return data
+
+
+def parent_game_for(db, game):
+    if game.parent_game_id:
+        parent = db.get(Game, game.parent_game_id)
+        if parent:
+            return parent
+    if game.parent_title:
+        return db.scalar(
+            select(Game)
+            .where(Game.game_type == "base", func.lower(Game.title) == game.parent_title.lower())
+            .order_by(Game.id)
+            .limit(1)
+        )
+    return None
+
+
+def expansions_for(db, base_game):
+    if normalize_game_type(base_game.game_type) != "base":
+        return []
+    return db.scalars(
+        select(Game)
+        .where(
+            Game.game_type.in_(EXPANSION_TYPES),
+            or_(
+                Game.parent_game_id == base_game.id,
+                (
+                    Game.parent_game_id.is_(None)
+                    & (func.lower(Game.parent_title) == base_game.title.lower())
+                ),
+            ),
+        )
+        .order_by(Game.game_type.desc(), func.lower(Game.title), Game.id)
+    ).all()
 
 
 def incomplete_game_condition():
@@ -336,11 +423,12 @@ def game_conditions():
     return conditions
 
 
-def game_to_dict(game):
+def game_to_dict(game, expansion_count=0):
     game_type = normalize_game_type(game.game_type)
     return {
         "id": game.id,
         "source_url": game.source_url or "",
+        "detail_url": url_for("game_detail", game_id=game.id),
         "title": game.title,
         "subtitle": game.subtitle or "",
         "image_url": game.image_url or "",
@@ -361,6 +449,8 @@ def game_to_dict(game):
         "game_type": game_type,
         "game_type_label": GAME_TYPES[game_type],
         "parent_title": game.parent_title or "",
+        "parent_game_id": game.parent_game_id,
+        "expansion_count": expansion_count,
         "description": game.description or "",
     }
 
@@ -381,8 +471,25 @@ def index():
         .distinct()
         .order_by(Game.location)
     ).all()
-    total_games = db.scalar(select(func.count(Game.id))) or 0
+    total_games = db.scalar(select(func.count(Game.id)).where(Game.game_type != "expansion")) or 0
     return render_template("index.html", locations=locations, total_games=total_games)
+
+
+@app.route("/game/<int:game_id>")
+def game_detail(game_id):
+    db = DBSession()
+    game = db.get(Game, game_id)
+    if not game:
+        abort(404)
+    parent_game = parent_game_for(db, game) if normalize_game_type(game.game_type) in EXPANSION_TYPES else None
+    expansions = expansions_for(db, game)
+    return render_template(
+        "game_detail.html",
+        game=game,
+        game_type=normalize_game_type(game.game_type),
+        parent_game=parent_game,
+        expansions=expansions,
+    )
 
 
 @app.route("/api/games")
@@ -392,17 +499,14 @@ def api_games():
     per_page = min(96, max(12, safe_int(request.args.get("per_page")) or 48))
     sort_mode = request.args.get("sort", "weight")
     conditions = game_conditions()
+    conditions.append(Game.game_type != "expansion")
 
-    count_stmt = select(func.count(Game.id))
-    if conditions:
-        count_stmt = count_stmt.where(*conditions)
+    count_stmt = select(func.count(Game.id)).where(*conditions)
     total = db.scalar(count_stmt) or 0
     pages = max(1, (total + per_page - 1) // per_page)
     page = min(page, pages)
 
-    stmt = select(Game)
-    if conditions:
-        stmt = stmt.where(*conditions)
+    stmt = select(Game).where(*conditions)
     if sort_mode == "name":
         stmt = stmt.order_by(func.lower(Game.title), Game.id)
     else:
@@ -410,8 +514,19 @@ def api_games():
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
     games = db.scalars(stmt).all()
 
+    base_ids = [game.id for game in games if normalize_game_type(game.game_type) == "base"]
+    expansion_counts = {}
+    if base_ids:
+        expansion_counts = dict(
+            db.execute(
+                select(Game.parent_game_id, func.count(Game.id))
+                .where(Game.parent_game_id.in_(base_ids), Game.game_type.in_(EXPANSION_TYPES))
+                .group_by(Game.parent_game_id)
+            ).all()
+        )
+
     return jsonify({
-        "games": [game_to_dict(game) for game in games],
+        "games": [game_to_dict(game, expansion_counts.get(game.id, 0)) for game in games],
         "total": total,
         "page": page,
         "pages": pages,
@@ -428,7 +543,15 @@ def api_random_game():
     game = db.scalar(stmt.order_by(func.random()).limit(1))
     if not game:
         return jsonify({"game": None})
-    return jsonify({"game": game_to_dict(game)})
+    expansion_count = 0
+    if normalize_game_type(game.game_type) == "base":
+        expansion_count = db.scalar(
+            select(func.count(Game.id)).where(
+                Game.parent_game_id == game.id,
+                Game.game_type.in_(EXPANSION_TYPES),
+            )
+        ) or 0
+    return jsonify({"game": game_to_dict(game, expansion_count)})
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -532,6 +655,7 @@ def bulk_paste_import():
     added = 0
     duplicates = 0
     invalid = 0
+    pending_expansions = []
 
     for item in items:
         if not isinstance(item, dict) or not item.get("selected", True):
@@ -563,8 +687,20 @@ def bulk_paste_import():
                 db.add(game)
                 db.flush()
             added += 1
+            if game_type in EXPANSION_TYPES:
+                pending_expansions.append(game)
         except IntegrityError:
             duplicates += 1
+
+    for game in pending_expansions:
+        data = {
+            "game_type": game.game_type,
+            "parent_title": game.parent_title,
+            "parent_game_id": game.parent_game_id,
+        }
+        link_parent_data(db, data, current_game_id=game.id)
+        game.parent_game_id = data["parent_game_id"]
+        game.parent_title = data["parent_title"]
 
     db.commit()
     extra = ""
@@ -577,15 +713,21 @@ def bulk_paste_import():
 @app.route("/admin/game/new", methods=["GET", "POST"])
 @admin_required
 def new_game():
+    db = DBSession()
+    parent_id = safe_int(request.args.get("parent_id"))
+    parent_game = db.get(Game, parent_id) if parent_id else None
+    if parent_game and normalize_game_type(parent_game.game_type) != "base":
+        parent_game = None
+
     if request.method == "POST":
-        data = form_game_data(request.form)
+        data = link_parent_data(db, form_game_data(request.form))
         if not data["title"]:
+            parent_game = db.get(Game, data.get("parent_game_id")) if data.get("parent_game_id") else None
             flash("게임 이름은 필수입니다.", "error")
-            return render_template("new.html", game=data, default_location=DEFAULT_LOCATION)
+            return render_template("new.html", game=data, default_location=DEFAULT_LOCATION, parent_game=parent_game)
 
         supplied_source = clean_text(request.form.get("source_url"))
         source_url = canonical_source_url(supplied_source) or f"manual:{uuid.uuid4()}"
-        db = DBSession()
         duplicate = duplicate_game_for_source(db, source_url) if supplied_source else None
         if duplicate:
             flash(
@@ -598,6 +740,9 @@ def new_game():
             game = Game(source_url=source_url, **data)
             db.add(game)
             db.commit()
+            if game.parent_game_id:
+                flash(f"{game.parent_title}의 확장으로 {game.title}을(를) 추가했습니다.", "success")
+                return redirect(url_for("edit_game", game_id=game.parent_game_id))
             flash(f"{game.title}을(를) 추가했습니다.", "success")
             return redirect(url_for("admin"))
         except IntegrityError:
@@ -611,7 +756,16 @@ def new_game():
             else:
                 flash("같은 출처 주소의 게임이 이미 있습니다.", "error")
             return redirect(url_for("admin"))
-    return render_template("new.html", game={}, default_location=DEFAULT_LOCATION)
+
+    game_data = {}
+    if parent_game:
+        game_data = {
+            "game_type": "expansion",
+            "parent_game_id": parent_game.id,
+            "parent_title": parent_game.title,
+            "location": parent_game.location or DEFAULT_LOCATION,
+        }
+    return render_template("new.html", game=game_data, default_location=DEFAULT_LOCATION, parent_game=parent_game)
 
 
 @app.route("/admin/game/<int:game_id>/enrich", methods=["POST"])
@@ -636,16 +790,12 @@ def enrich_game(game_id):
             flash(f"이 BoardLife 게임은 이미 {duplicate.title}(으)로 등록되어 있습니다.", "error")
             return redirect(url_for("admin", incomplete=1, enrich=game.id))
 
-    data = form_game_data(request.form)
+    data = link_parent_data(db, form_game_data(request.form), current_game_id=game.id)
     for key, value in data.items():
-        if key in {"location", "game_type"}:
+        if key in {"location", "game_type", "parent_game_id", "parent_title"}:
             setattr(game, key, value)
         elif value not in (None, ""):
             setattr(game, key, value)
-    if data.get("game_type") == "base":
-        game.parent_title = ""
-    elif data.get("parent_title"):
-        game.parent_title = data["parent_title"]
     if source_url:
         game.source_url = source_url
 
@@ -667,19 +817,44 @@ def edit_game(game_id):
     game = db.get(Game, game_id)
     if not game:
         abort(404)
+
     if request.method == "POST":
-        data = form_game_data(request.form)
+        data = link_parent_data(db, form_game_data(request.form), current_game_id=game.id)
         if not data["title"]:
             flash("게임 이름은 필수입니다.", "error")
-            return render_template("edit.html", game=game, default_location=DEFAULT_LOCATION)
+            return render_template(
+                "edit.html",
+                game=game,
+                default_location=DEFAULT_LOCATION,
+                parent_game=parent_game_for(db, game),
+                expansions=expansions_for(db, game),
+            )
+
+        current_children = expansions_for(db, game)
+        if normalize_game_type(game.game_type) == "base" and data["game_type"] != "base" and current_children:
+            flash("연결된 확장이 있어 본판을 확장으로 변경할 수 없습니다. 확장을 먼저 다른 본판으로 옮겨 주세요.", "error")
+            return redirect(url_for("edit_game", game_id=game.id))
+
+        old_title = game.title
         for key, value in data.items():
             setattr(game, key, value)
-        if game.game_type == "base":
-            game.parent_title = ""
+
+        if normalize_game_type(game.game_type) == "base" and old_title != game.title:
+            children = db.scalars(select(Game).where(Game.parent_game_id == game.id)).all()
+            for child in children:
+                child.parent_title = game.title
+
         db.commit()
         flash("게임 정보를 수정했습니다.", "success")
         return redirect(url_for("admin"))
-    return render_template("edit.html", game=game, default_location=DEFAULT_LOCATION)
+
+    return render_template(
+        "edit.html",
+        game=game,
+        default_location=DEFAULT_LOCATION,
+        parent_game=parent_game_for(db, game),
+        expansions=expansions_for(db, game),
+    )
 
 
 @app.route("/admin/game/<int:game_id>/delete", methods=["POST"])
@@ -688,6 +863,10 @@ def delete_game(game_id):
     db = DBSession()
     game = db.get(Game, game_id)
     if game:
+        children = expansions_for(db, game)
+        if children:
+            flash(f"{game.title}에는 확장 {len(children)}개가 연결되어 있어 삭제할 수 없습니다. 확장을 먼저 정리해 주세요.", "error")
+            return redirect(url_for("edit_game", game_id=game.id))
         db.delete(game)
         db.commit()
         flash("게임을 삭제했습니다.", "success")
