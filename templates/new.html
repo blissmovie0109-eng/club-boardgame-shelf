@@ -1,13 +1,25 @@
 {% extends "base.html" %}
-{% block title %}게임 직접 추가 · {{ club_name }}{% endblock %}
+{% block title %}{% if parent_game %}{{ parent_game.title }} 확장 추가{% else %}게임 직접 추가{% endif %} · {{ club_name }}{% endblock %}
 {% block content %}
 <main class="wrap narrow panel-page">
-  <a href="{{url_for('admin')}}" class="back">← 관리자</a>
+  <a href="{% if parent_game %}{{ url_for('edit_game', game_id=parent_game.id) }}{% else %}{{url_for('admin')}}{% endif %}" class="back">← {% if parent_game %}{{ parent_game.title }} 수정{% else %}관리자{% endif %}</a>
   <section class="panel">
+    {% if parent_game %}
+    <div class="parent-link-banner">
+      <span>🧩 확장 추가</span>
+      <strong>{{ parent_game.title }}</strong>
+      <small>이 게임의 확장으로 자동 연결됩니다.</small>
+    </div>
+    <h1>{{ parent_game.title }} 확장 추가</h1>
+    <p>확장 정보를 입력하세요. 독립적으로 플레이 가능한 확장이라면 게임 종류를 ‘독립형 확장’으로 바꾸면 오늘의 선택에도 포함됩니다.</p>
+    {% else %}
     <h1>게임 직접 추가</h1>
     <p>필요한 항목만 직접 적어도 됩니다. 일반 확장은 오늘의 선택 랜덤 추천에서 자동 제외됩니다.</p>
+    {% endif %}
+
     <form method="post" class="edit-grid">
       <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="parent_game_id" value="{{ game.parent_game_id or '' }}">
       <label class="wide">BoardLife/참고 주소(선택)<input name="source_url" type="url" value="{{game.source_url or ''}}" placeholder="https://boardlife.co.kr/game/..."></label>
       <label>게임명<input name="title" value="{{game.title or ''}}" required></label>
       <label>보유 장소<input name="location" value="{{game.location or default_location}}" placeholder="아지트" required></label>
@@ -18,7 +30,7 @@
           <option value="standalone_expansion" {% if game.game_type == 'standalone_expansion' %}selected{% endif %}>독립형 확장 — 랜덤 추천 포함</option>
         </select>
       </label>
-      <label>본판 게임명<input name="parent_title" value="{{game.parent_title or ''}}" placeholder="확장일 때 입력"></label>
+      <label>본판 게임명<input name="parent_title" value="{{game.parent_title or ''}}" {% if parent_game %}readonly{% endif %} placeholder="확장일 때 입력"></label>
       <label>영문/부제<input name="subtitle" value="{{game.subtitle or ''}}"></label>
       <label>카테고리<input name="category" value="{{game.category or ''}}" list="categoryOptions"><datalist id="categoryOptions"><option value="전략"><option value="추상"><option value="컬렉터블"><option value="가족"><option value="어린이"><option value="파티"><option value="테마"><option value="워게임"><option value="머더미스터리"></datalist></label>
       <label class="wide">이미지 URL<input name="image_url" type="url" value="{{game.image_url or ''}}"></label>
@@ -35,7 +47,7 @@
       <label>추천 인원<input name="recommended_players" value="{{game.recommended_players or ''}}"></label>
       <label>연령<input name="age" value="{{game.age or ''}}"></label>
       <label class="wide">게임 설명<textarea name="description" rows="5" placeholder="회원들이 게임을 고를 때 참고할 짧은 설명">{{game.description or ''}}</textarea></label>
-      <button class="primary wide">게임 추가</button>
+      <button class="primary wide">{% if parent_game %}확장 추가{% else %}게임 추가{% endif %}</button>
     </form>
   </section>
 </main>
