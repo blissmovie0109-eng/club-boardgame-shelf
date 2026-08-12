@@ -7,40 +7,6 @@
 <main class="wrap panel-page">
   <div class="topline"><a href="{{url_for('index')}}" class="back">← 공개 목록</a><a href="{{url_for('admin_logout')}}">로그아웃</a></div>
 
-  <section class="panel bulk-panel">
-    <div class="section-heading">
-      <div>
-        <h1>⚡ 여러 게임 한 번에 기본 등록</h1>
-        <p>BoardLife에서 게임이 여러 개 보이는 목록·순위 페이지를 통째로 복사하면 게임 링크와 이름을 찾아 한 번에 등록합니다.</p>
-      </div>
-    </div>
-    <ol class="import-steps compact-steps">
-      <li>BoardLife에서 등록할 게임들이 여러 개 보이는 페이지를 엽니다.</li>
-      <li><b>Ctrl+A → Ctrl+C</b> 후 아래 상자에 <b>Ctrl+V</b>합니다.</li>
-      <li>찾아낸 게임 목록에서 필요 없는 항목만 체크 해제하고, 확장이라면 종류를 바꿉니다.</li>
-      <li><b>선택한 게임 한 번에 등록</b>을 누릅니다. 이미 등록된 게임 번호는 자동으로 건너뜁니다.</li>
-    </ol>
-
-    <form id="bulkPasteForm" method="post" action="{{ url_for('bulk_paste_import') }}">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="bulk_games_json" id="bulkGamesJson">
-      <div class="bulk-paste-top">
-        <label>보유 장소
-          <input name="bulk_location" value="{{ default_location }}" placeholder="아지트" required>
-        </label>
-        <span class="hint">한 번에 최대 300개 · 상세정보가 비어 있는 게임은 아래 ‘정보 보강’ 모드에서 빠르게 채울 수 있습니다.</span>
-      </div>
-      <div id="bulkPasteBox" class="boardlife-paste-box bulk-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 목록 페이지 붙여넣기">BoardLife 목록 페이지를 여기에 Ctrl+V</div>
-      <div id="bulkPasteStatus" class="paste-status muted">아직 읽어온 목록이 없습니다.</div>
-      <div id="bulkPreview" class="bulk-preview hidden"></div>
-      <div id="bulkActions" class="bulk-actions hidden">
-        <button type="button" class="button" id="bulkSelectAll">전체 선택</button>
-        <button type="button" class="button" id="bulkSelectNone">전체 해제</button>
-        <button type="submit" class="primary bulk-submit">선택한 게임 한 번에 등록</button>
-      </div>
-    </form>
-  </section>
-
   <section class="panel paste-panel" id="detail-import">
     <div class="section-heading">
       <div>
@@ -122,6 +88,40 @@
 
       <input type="hidden" name="material_url" value="{{ enrich_game.material_url if enrich_game else '' }}">
       <button id="pasteImportButton" class="primary paste-submit" type="submit" disabled>{% if enrich_game %}이 게임 정보 업데이트{% elif new_parent_id %}이 확장 추가{% else %}확인한 게임 추가{% endif %}</button>
+    </form>
+  </section>
+
+  <section class="panel bulk-panel">
+    <div class="section-heading">
+      <div>
+        <h2>⚡ 여러 게임 한 번에 기본 등록</h2>
+        <p>BoardLife에서 게임이 여러 개 보이는 목록·순위 페이지를 통째로 복사하면 게임 링크와 이름을 찾아 한 번에 등록합니다.</p>
+      </div>
+    </div>
+    <ol class="import-steps compact-steps">
+      <li>BoardLife에서 등록할 게임들이 여러 개 보이는 페이지를 엽니다.</li>
+      <li><b>Ctrl+A → Ctrl+C</b> 후 아래 상자에 <b>Ctrl+V</b>합니다.</li>
+      <li>찾아낸 게임 목록에서 필요 없는 항목만 체크 해제하고, 확장이라면 종류를 바꿉니다.</li>
+      <li><b>선택한 게임 한 번에 등록</b>을 누릅니다. 이미 등록된 게임 번호는 자동으로 건너뜁니다.</li>
+    </ol>
+
+    <form id="bulkPasteForm" method="post" action="{{ url_for('bulk_paste_import') }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="bulk_games_json" id="bulkGamesJson">
+      <div class="bulk-paste-top">
+        <label>보유 장소
+          <input name="bulk_location" value="{{ default_location }}" placeholder="아지트" required>
+        </label>
+        <span class="hint">한 번에 최대 300개 · 상세정보가 비어 있는 게임은 아래 ‘정보 보강’ 모드에서 빠르게 채울 수 있습니다.</span>
+      </div>
+      <div id="bulkPasteBox" class="boardlife-paste-box bulk-paste-box" tabindex="0" role="textbox" aria-label="BoardLife 목록 페이지 붙여넣기">BoardLife 목록 페이지를 여기에 Ctrl+V</div>
+      <div id="bulkPasteStatus" class="paste-status muted">아직 읽어온 목록이 없습니다.</div>
+      <div id="bulkPreview" class="bulk-preview hidden"></div>
+      <div id="bulkActions" class="bulk-actions hidden">
+        <button type="button" class="button" id="bulkSelectAll">전체 선택</button>
+        <button type="button" class="button" id="bulkSelectNone">전체 해제</button>
+        <button type="submit" class="primary bulk-submit">선택한 게임 한 번에 등록</button>
+      </div>
     </form>
   </section>
 
@@ -287,7 +287,7 @@
     if (enrichGameId && (value === undefined || value === null || value === '')) return;
     el.value = value || '';
   };
-  const first = (re, text, group=1) => { const m = text.match(re); return m ? clean(m[group]) : ''; };
+  const first = (re, text, group=1) => { const m = String(text || '').match(re); return m ? clean(m[group]) : ''; };
   const rangeRe = '[-~–—]';
   const allowedCategories = ['전략', '추상', '컬렉터블', '가족', '어린이', '파티', '테마', '워게임', '머더미스터리'];
   let importReady = false;
@@ -298,6 +298,99 @@
   function normalizeCategory(value) {
     const text = clean(value).replace(/^[,·/|\s]+|[,·/|\s]+$/g, '');
     return allowedCategories.find(category => text === category || text.startsWith(category + ',') || text.includes(category)) || '';
+  }
+
+  function normalizeRating(value) {
+    const number = Number.parseFloat(String(value || '').replace(',', '.'));
+    if (!Number.isFinite(number) || number < 0 || number > 10) return '';
+    return String(Math.round(number * 100) / 100);
+  }
+
+  function ratingFromText(text) {
+    const source = clean(text);
+    if (!source) return '';
+    const number = '(10(?:\\.0+)?|[0-9](?:\\.[0-9]+)?)';
+    const patterns = [
+      new RegExp('(?:게임\\s*)?평점(?:\\s*정보)?\\s*[:：]?\\s*' + number, 'i'),
+      new RegExp('(?:평균\\s*)?평점\\s*[:：]?\\s*' + number, 'i'),
+      new RegExp('★+\\s*' + number),
+      new RegExp(number + '\\s*(?:점\\s*)?\\/\\s*10(?:\\.0+)?\\b', 'i'),
+      new RegExp(number + '\\s+(?:전체|전략|추상|컬렉터블|가족|어린이|파티|테마|워게임|머더미스터리)\\s*\\d+\\s*위', 'i'),
+      new RegExp(number + '\\s+(?:전체|전략)\\s*(?=\\d+\\s*위|순위|$)', 'i'),
+    ];
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (match) {
+        const rating = normalizeRating(match[1]);
+        if (rating !== '') return rating;
+      }
+    }
+    return '';
+  }
+
+  function findRating(doc, plain, compact, core, titlePos) {
+    if (doc) {
+      const metaSelectors = [
+        '[itemprop="ratingValue"]',
+        'meta[itemprop="ratingValue"]',
+        '[data-rating]',
+        '[data-score]',
+      ];
+      for (const selector of metaSelectors) {
+        for (const el of doc.querySelectorAll(selector)) {
+          const raw = el.getAttribute('content') || el.getAttribute('data-rating') || el.getAttribute('data-score') || el.textContent || '';
+          const rating = normalizeRating(raw);
+          if (rating !== '') return rating;
+        }
+      }
+
+      for (const script of doc.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const payload = JSON.parse(script.textContent || '{}');
+          const queue = Array.isArray(payload) ? [...payload] : [payload];
+          while (queue.length) {
+            const item = queue.shift();
+            if (!item || typeof item !== 'object') continue;
+            if (item.ratingValue !== undefined) {
+              const rating = normalizeRating(item.ratingValue);
+              if (rating !== '') return rating;
+            }
+            if (item.aggregateRating && item.aggregateRating.ratingValue !== undefined) {
+              const rating = normalizeRating(item.aggregateRating.ratingValue);
+              if (rating !== '') return rating;
+            }
+            Object.values(item).forEach(value => {
+              if (value && typeof value === 'object') queue.push(value);
+            });
+          }
+        } catch (e) {}
+      }
+
+      const ratingNodes = [...doc.querySelectorAll('[class*="rating" i],[class*="score" i],[class*="rate" i],[id*="rating" i],[id*="score" i]')];
+      for (const node of ratingNodes.slice(0, 80)) {
+        const textRating = ratingFromText(node.textContent || '');
+        if (textRating !== '') return textRating;
+        const nodeText = clean(node.textContent || '');
+        if (/^10(?:\.0+)?$|^[0-9](?:\.[0-9]+)?$/.test(nodeText)) {
+          const rating = normalizeRating(nodeText);
+          if (rating !== '') return rating;
+        }
+      }
+    }
+
+    const lines = String(plain || '').split(/\r?\n/).map(clean).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      if (/게임\s*평점|평점/.test(lines[i])) {
+        const windowText = lines.slice(Math.max(0, i - 2), Math.min(lines.length, i + 5)).join(' ');
+        const rating = ratingFromText(windowText);
+        if (rating !== '') return rating;
+      }
+    }
+
+    const titleArea = titlePos >= 0
+      ? compact.slice(Math.max(0, titlePos - 1800), Math.min(compact.length, titlePos + 2600))
+      : compact.slice(0, 4400);
+    return ratingFromText(titleArea) || ratingFromText(core) || ratingFromText(compact);
   }
 
   async function checkDuplicate() {
@@ -389,17 +482,19 @@
     const titlePos = compact.indexOf(title);
     const core = titlePos >= 0 ? compact.slice(titlePos, titlePos + 12000) : compact.slice(0, 12000);
     const heading = findSubtitleAndYear(doc, plain, title);
-    const players = core.match(new RegExp('인원\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*명'));
+
+    const playersRange = core.match(new RegExp('인원\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*명'));
+    const singlePlayers = !playersRange ? core.match(/인원\s*(\d+)\s*명/) : null;
+    const minPlayers = playersRange ? playersRange[1] : (singlePlayers ? singlePlayers[1] : '');
+    const maxPlayers = playersRange ? playersRange[2] : (singlePlayers ? singlePlayers[1] : '');
+
     const timeRange = core.match(new RegExp('(?:플레이\\s*)?시간\\s*(\\d+)\\s*' + rangeRe + '\\s*(\\d+)\\s*분'));
     const singleTime = !timeRange ? core.match(/(?:플레이\s*)?시간\s*(\d+)\s*분/) : null;
     const minTime = timeRange ? timeRange[1] : (singleTime ? singleTime[1] : '');
     const maxTime = timeRange ? timeRange[2] : (singleTime ? singleTime[1] : '');
     const difficulty = first(/난이도\s*([0-9]+(?:\.[0-9]+)?)/, core);
-    let rating = first(/평점\s*([0-9]+(?:\.[0-9]+)?)/, core);
-    if (!rating) {
-      const topArea = titlePos >= 0 ? compact.slice(Math.max(0, titlePos - 600), titlePos + 300) : compact.slice(0, 900);
-      rating = first(/★\s*([0-9]+(?:\.[0-9]+)?)/, topArea) || first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+(?:전체|전략)(?:\s|$)/, topArea) || first(/(?:^|\s)(10(?:\.0+)?|[0-9](?:\.[0-9]+))\s+전체\s*\d+위/, topArea);
-    }
+    const rating = findRating(doc, plain, compact, core, titlePos);
+
     let age = first(/(?:사용\s*)?연령\s*([0-9]+세\s*이상)/, core) || first(/추천\s*연령\s*([0-9]+세\s*이상)/, core);
     let bestPlayers = '', recommendedPlayers = '';
     let recommendation = core.match(/베스트\s*\/\s*추천\s*([0-9]+인(?:\s*,\s*[0-9]+인)*)\s*\/\s*([0-9]+인(?:\s*,\s*[0-9]+인)*)/);
@@ -408,6 +503,7 @@
       recommendation = core.match(/베스트\s*:?\s*([^,\)\/]{1,40}).*?추천\s*:?\s*([^\)\/]{1,40})/);
       if (recommendation) { bestPlayers = clean(recommendation[1]); recommendedPlayers = clean(recommendation[2]); }
     }
+
     let image = '';
     if (doc) {
       const images = [...doc.querySelectorAll('img')], normalizedTitle = title.replace(/\s+/g, '');
@@ -417,22 +513,43 @@
     }
     if (!image && html) image = first(/(https?:\/\/img\.boardlife\.co\.kr\/data\/photo\/[^"'<>\s]+)/i, html).replace(/&amp;/g, '&');
     const urlInClipboard = first(/(https?:\/\/(?:www\.)?boardlife\.co\.kr\/game\/\d+)/i, html + ' ' + plain);
-    if (!sourceUrl.value && urlInClipboard) sourceUrl.value = urlInClipboard;
+    if (urlInClipboard) sourceUrl.value = urlInClipboard;
 
-    set('piTitle', title); set('piSubtitle', heading.subtitle); set('piYear', heading.year || first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, core));
-    set('piRating', rating); set('piDifficulty', difficulty); set('piAge', age); set('piMinPlayers', players ? players[1] : ''); set('piMaxPlayers', players ? players[2] : '');
-    set('piBestPlayers', bestPlayers); set('piRecommendedPlayers', recommendedPlayers); set('piMinTime', minTime); set('piMaxTime', maxTime); set('piImage', image);
+    set('piTitle', title);
+    set('piSubtitle', heading.subtitle);
+    set('piYear', heading.year || first(/(?:^|\s)((?:19|20)\d{2})년(?:\s|$)/, core));
+    set('piRating', rating);
+    set('piDifficulty', difficulty);
+    set('piAge', age);
+    set('piMinPlayers', minPlayers);
+    set('piMaxPlayers', maxPlayers);
+    set('piBestPlayers', bestPlayers);
+    set('piRecommendedPlayers', recommendedPlayers);
+    set('piMinTime', minTime);
+    set('piMaxTime', maxTime);
+    set('piImage', image);
+
     const categoryIndex = core.indexOf('카테고리');
     const category = normalizeCategory(categoryIndex >= 0 ? core.slice(categoryIndex, categoryIndex + 180) : '');
     set('piCategory', category);
     const descMatch = core.match(/(?:게임\s*설명\s*)?([^]{20,1000}?)(?=커뮤니티\s*투표|디자이너|카테고리)/);
     if (descMatch && !/인원\s*\d/.test(descMatch[1])) set('piDescription', clean(descMatch[1]).slice(0, 1000));
 
-    preview.classList.remove('hidden'); box.textContent = '✓ 읽었습니다. 아래 입력값을 확인하고 필요하면 수정하세요.'; box.classList.add('loaded');
+    preview.classList.remove('hidden');
+    box.textContent = '✓ 읽었습니다. 아래 입력값을 확인하고 필요하면 수정하세요.';
+    box.classList.add('loaded');
     const facts = [];
-    if (players) facts.push(`${players[1]}~${players[2]}명`); if (minTime) facts.push(minTime === maxTime ? `${minTime}분` : `${minTime}~${maxTime}분`); if (difficulty) facts.push(`웨이트 ${difficulty}`); if (rating) facts.push(`평점 ${rating}`); if (age) facts.push(age); if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`); if (category) facts.push(`카테고리 ${category}`);
+    if (minPlayers) facts.push(minPlayers === maxPlayers ? `${minPlayers}명` : `${minPlayers}~${maxPlayers}명`);
+    if (minTime) facts.push(minTime === maxTime ? `${minTime}분` : `${minTime}~${maxTime}분`);
+    if (difficulty) facts.push(`웨이트 ${difficulty}`);
+    if (rating) facts.push(`평점 ${rating}`);
+    if (age) facts.push(age);
+    if (bestPlayers || recommendedPlayers) facts.push(`베스트/추천 ${bestPlayers || '?'} / ${recommendedPlayers || '?'}`);
+    if (category) facts.push(`카테고리 ${category}`);
     status.innerHTML = `<b>✓ ${escapeHtml(title)}</b>${facts.length ? ' · ' + facts.map(escapeHtml).join(' · ') : ''}`;
-    importReady = true; await checkDuplicate(); syncSubmit();
+    importReady = true;
+    await checkDuplicate();
+    syncSubmit();
   });
 
   if (enrichGameId && sourceUrl.value) checkDuplicate();
