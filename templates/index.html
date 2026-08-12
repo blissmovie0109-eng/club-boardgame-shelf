@@ -1,12 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
-<header class="hero"><div class="wrap"><div class="brand">🎲 {{ club_name }}</div><h1>{{ site_tagline }}</h1><p>현재 <strong id="count">{{ games|length }}</strong>개의 게임이 있습니다. 인원과 시간을 골라 바로 찾아보세요.</p></div></header>
-<main class="wrap main">
-<section class="controls">
-<label class="search"><span>🔎</span><input id="search" type="search" placeholder="게임 이름 검색"></label>
-<div class="chips" id="playerFilters"><button class="chip active" data-players="0">전체</button>{% for n in [2,3,4,5,6] %}<button class="chip" data-players="{{n}}">{{n}}인{% if n == 6 %}+{% endif %}</button>{% endfor %}</div>
-<div class="chips" id="timeFilters"><button class="chip active" data-time="0">시간 전체</button><button class="chip" data-time="30">30분 이하</button><button class="chip" data-time="60">60분 이하</button><button class="chip" data-time="120">120분 이하</button></div>
-<div class="result-row"><span><b id="visibleCount">{{games|length}}</b>개 표시 중</span><button id="randomBtn" class="random">🎲 하나 골라줘</button></div>
-</section>
-{% if games %}<section class="grid" id="grid">{% for g in games %}<article class="card" data-title="{{(g.title ~ ' ' ~ (g.subtitle or ''))|lower}}" data-minp="{{g.min_players or ''}}" data-maxp="{{g.max_players or ''}}" data-maxt="{{g.max_time or ''}}">{% if g.source_url and g.source_url.startswith('http') %}<a href="{{g.source_url}}" target="_blank" rel="noopener" class="image-wrap">{% else %}<div class="image-wrap">{% endif %}{% if g.image_url %}<img src="{{g.image_url}}" alt="{{g.title}}" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="placeholder">🎲</div>{% endif %}{% if g.source_url and g.source_url.startswith('http') %}</a>{% else %}</div>{% endif %}<div class="card-body"><div class="eyebrow">{% if g.year %}{{g.year}} · {% endif %}{{g.category or '보드게임'}}</div><h2>{{g.title}}</h2>{% if g.subtitle %}<div class="subtitle">{{g.subtitle}}</div>{% endif %}<div class="facts"><span>👥 {% if g.min_players %}{{g.min_players}}{% if g.max_players and g.max_players != g.min_players %}–{{g.max_players}}{% endif %}명{% else %}정보 없음{% endif %}</span><span>⏱ {% if g.min_time %}{{g.min_time}}{% if g.max_time and g.max_time != g.min_time %}–{{g.max_time}}{% endif %}분{% else %}정보 없음{% endif %}</span></div><div class="facts secondary">{% if g.difficulty %}<span>⚖ 난이도 {{'%.2f'|format(g.difficulty)}}</span>{% endif %}{% if g.rating %}<span>⭐ {{'%.1f'|format(g.rating)}}</span>{% endif %}</div>{% if g.best_players or g.recommended_players %}<div class="recommend">{% if g.best_players %}<b>베스트</b> {{g.best_players}}{% endif %}{% if g.recommended_players %} · 추천 {{g.recommended_players}}{% endif %}</div>{% endif %}</div></article>{% endfor %}</section><div id="empty" class="empty hidden">조건에 맞는 게임이 없습니다.</div>{% else %}<div class="empty">아직 등록된 게임이 없습니다.<br><small>관리자가 게임을 추가하면 여기에 나타납니다.</small></div>{% endif %}
-</main><footer class="footer"><a href="{{url_for('admin')}}">관리자</a></footer><script src="{{ url_for('static', filename='app.js') }}"></script>{% endblock %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-title">🎲 {{ club_name }}</div>
+    <a class="manage-button" href="{{ url_for('admin') }}">관리 모드</a>
+  </div>
+</header>
+<main class="collection-page">
+  <section class="collection-toolbar">
+    <div class="toolbar-left">
+      <div class="sort-group"><strong>정렬:</strong><button class="sort-btn active" data-sort="weight">웨이트</button><button class="sort-btn" data-sort="name">이름순</button></div>
+      <label class="collection-search"><input id="search" type="search" placeholder="게임 이름 검색"></label>
+    </div>
+    <div class="toolbar-right">
+      <label class="location-filter">보유 장소:
+        <select id="locationFilter"><option value="">전체보기</option>{% for location in locations %}<option value="{{ location|lower }}">{{ location }}</option>{% endfor %}</select>
+      </label>
+      <span class="count-badge"><b id="visibleCount">{{ games|length }}</b>개</span>
+    </div>
+  </section>
+
+  {% if games %}
+  <section class="collection-grid" id="grid">
+    {% for g in games %}
+    <article class="collection-card" data-title="{{ (g.title ~ ' ' ~ (g.subtitle or ''))|lower }}" data-weight="{{ g.difficulty or 99 }}" data-location="{{ (g.location or '')|lower }}">
+      {% if g.source_url and g.source_url.startswith('http') %}<a class="cover-link" href="{{ g.source_url }}" target="_blank" rel="noopener">{% endif %}
+      <div class="collection-cover">{% if g.image_url %}<img src="{{ g.image_url }}" alt="{{ g.title }}" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="cover-placeholder">🎲</div>{% endif %}</div>
+      {% if g.source_url and g.source_url.startswith('http') %}</a>{% endif %}
+      <div class="collection-body">
+        <h2>{{ g.title }}</h2>
+        {% if g.category %}<div class="category-row"><span class="tag">{{ g.category }}</span></div>{% endif %}
+        <div class="info-line">⚖ <b>웨이트:</b> {% if g.difficulty %}<span class="stars" aria-label="웨이트 {{ '%.2f'|format(g.difficulty) }}">{% set full = g.difficulty|round(0, 'floor')|int %}{% for i in range(5) %}{% if i < full %}★{% else %}<span class="star-off">★</span>{% endif %}{% endfor %}</span> <strong>{{ '%.2f'|format(g.difficulty) }}</strong>{% else %}<span class="muted">정보 없음</span>{% endif %}</div>
+        <div class="info-line">👥 <b>인원:</b> {% if g.min_players %}{{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}~{{ g.max_players }}{% endif %}명{% else %}정보 없음{% endif %}{% if g.best_players %} <span class="muted">(베스트: {{ g.best_players }})</span>{% endif %}</div>
+        {% if g.min_time %}<div class="info-line">⏱ <b>시간:</b> {{ g.min_time }}{% if g.max_time and g.max_time != g.min_time %}~{{ g.max_time }}{% endif %}분</div>{% endif %}
+        <div class="info-line location-line">📍 <b>보유 장소:</b> <span class="location-pill">{{ g.location or '미지정' }}</span></div>
+        {% if g.source_url and g.source_url.startswith('http') %}<div class="card-actions"><a href="{{ g.source_url }}" target="_blank" rel="noopener">게임 정보</a></div>{% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+  <div id="empty" class="empty hidden">조건에 맞는 게임이 없습니다.</div>
+  {% else %}<div class="empty">아직 등록된 게임이 없습니다.</div>{% endif %}
+</main>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}
