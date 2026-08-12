@@ -4,13 +4,11 @@ import re
 import secrets
 import uuid
 from functools import wraps
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 
-import requests
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
-from sqlalchemy import Float, Integer, String, Text, create_engine, func, inspect, select, text
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from sqlalchemy import Float, Integer, String, Text, create_engine, func, inspect, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, scoped_session, sessionmaker
 
@@ -103,6 +101,10 @@ def init_db():
             text("UPDATE games SET location = :location WHERE location IS NULL OR location = ''"),
             {"location": DEFAULT_LOCATION},
         )
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_title ON games (title)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_location ON games (location)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_difficulty ON games (difficulty)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_games_players ON games (min_players, max_players)"))
 
 
 def admin_required(fn):
@@ -144,11 +146,6 @@ def clean_text(value):
     return re.sub(r"\s+", " ", value or "").strip()
 
 
-def first_match(pattern, text_value, flags=0):
-    match = re.search(pattern, text_value, flags)
-    return match.groups() if match else None
-
-
 def safe_float(value):
     try:
         return float(value)
@@ -163,35 +160,6 @@ def safe_int(value):
         return None
 
 
-def validate_boardlife_url(url):
-    try:
-        parsed = urlparse(url.strip())
-    except Exception:
-        return False
-    return (
-        parsed.scheme == "https"
-        and parsed.hostname in {"boardlife.co.kr", "www.boardlife.co.kr"}
-        and bool(re.match(r"^/game/\d+/?$", parsed.path))
-    )
-
-
-def fetch_boardlife(url, headers, max_redirects=3):
-    current = url
-    for _ in range(max_redirects + 1):
-        if not validate_boardlife_url(current):
-            raise ValueError("허용되지 않은 BoardLife 주소입니다.")
-        response = requests.get(current, headers=headers, timeout=20, allow_redirects=False)
-        if response.is_redirect or response.is_permanent_redirect:
-            location = response.headers.get("Location")
-            if not location:
-                raise ValueError("BoardLife 리디렉션 주소를 확인할 수 없습니다.")
-            current = urljoin(current, location)
-            continue
-        response.raise_for_status()
-        return response
-    raise ValueError("BoardLife 리디렉션 횟수가 너무 많습니다.")
-
-
 def safe_next_url(value):
     if not value:
         return None
@@ -199,96 +167,6 @@ def safe_next_url(value):
     if parsed.scheme or parsed.netloc or not value.startswith("/"):
         return None
     return value
-
-
-def extract_label_value(text_value, label, value_pattern, window=120):
-    idx = text_value.find(label)
-    if idx < 0:
-        return None
-    chunk = text_value[idx: idx + window]
-    match = re.search(value_pattern, chunk)
-    return match.groups() if match else None
-
-
-def parse_boardlife(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
-        "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.7",
-    }
-    response = fetch_boardlife(url, headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-    page_text = clean_text(soup.get_text(" ", strip=True))
-
-    def meta(*keys):
-        for key in keys:
-            tag = soup.find("meta", attrs={"property": key}) or soup.find("meta", attrs={"name": key})
-            if tag and tag.get("content"):
-                return clean_text(tag.get("content"))
-        return ""
-
-    title = meta("og:title", "twitter:title")
-    if not title:
-        h1 = soup.find("h1")
-        title = clean_text(h1.get_text(" ", strip=True)) if h1 else ""
-    title = re.sub(r"\s*\|\s*보드게임.*$", "", title)
-    title = re.sub(r"\s*보드게임$", "", title).strip()
-
-    image_url = meta("og:image", "twitter:image")
-    if not image_url:
-        image = soup.find("img", src=re.compile(r"boardlife"))
-        image_url = image.get("src", "") if image else ""
-    if image_url.startswith("//"):
-        image_url = "https:" + image_url
-
-    description = meta("description", "og:description")
-    players = extract_label_value(page_text, "인원", r"(\d+)\s*[-~]\s*(\d+)\s*명") or first_match(r"인원\s*(\d+)\s*[-~]\s*(\d+)\s*명", page_text)
-    min_players, max_players = (map(int, players) if players else (None, None))
-    playtime = extract_label_value(page_text, "플레이 시간", r"(\d+)\s*[-~]\s*(\d+)\s*분") or first_match(r"플레이 시간\s*(\d+)\s*[-~]\s*(\d+)\s*분", page_text)
-    min_time, max_time = (map(int, playtime) if playtime else (None, None))
-
-    difficulty_match = first_match(r"난이도\s*([0-9]+(?:\.[0-9]+)?)", page_text)
-    difficulty = safe_float(difficulty_match[0]) if difficulty_match else None
-    rating_match = first_match(r"평점\s*([0-9]+(?:\.[0-9]+)?)", page_text)
-    rating = safe_float(rating_match[0]) if rating_match else None
-    year_match = first_match(r"(?:^|\s)((?:19|20)\d{2})년(?:\s|$)", page_text)
-    year = safe_int(year_match[0]) if year_match else None
-
-    best_players = ""
-    recommended_players = ""
-    recommendation = first_match(r"베스트\s*:?\s*([^,\)]+).*?추천\s*:?\s*([^\)]+)", page_text)
-    if recommendation:
-        best_players = clean_text(recommendation[0])
-        recommended_players = clean_text(recommendation[1])
-
-    age_match = first_match(r"사용 연령\s*([^\n]{1,30}?이상)", page_text)
-    age = clean_text(age_match[0]) if age_match else ""
-    category_match = first_match(r"카테고리\s*([^|]{1,100})", page_text)
-    category = clean_text(category_match[0])[:100] if category_match else ""
-
-    if not title:
-        raise ValueError("게임 제목을 찾지 못했습니다. 직접 추가 기능을 이용해 주세요.")
-
-    return {
-        "source_url": url,
-        "title": title,
-        "subtitle": "",
-        "image_url": image_url,
-        "video_url": "",
-        "material_url": "",
-        "year": year,
-        "min_players": min_players,
-        "max_players": max_players,
-        "best_players": best_players,
-        "recommended_players": recommended_players,
-        "min_time": min_time,
-        "max_time": max_time,
-        "difficulty": difficulty,
-        "rating": rating,
-        "age": age,
-        "category": category,
-        "location": DEFAULT_LOCATION,
-        "description": description[:1000],
-    }
 
 
 def form_game_data(form):
@@ -314,12 +192,115 @@ def form_game_data(form):
     }
 
 
+def game_conditions():
+    conditions = []
+    query = clean_text(request.args.get("q"))
+    location = clean_text(request.args.get("location"))
+    players = safe_int(request.args.get("players")) or 0
+    weight = clean_text(request.args.get("weight"))
+
+    if query:
+        pattern = f"%{query}%"
+        conditions.append(or_(Game.title.ilike(pattern), Game.subtitle.ilike(pattern)))
+    if location:
+        conditions.append(func.lower(Game.location) == location.lower())
+    if players:
+        if players >= 6:
+            conditions.append(Game.max_players >= 6)
+        else:
+            conditions.extend([Game.min_players <= players, Game.max_players >= players])
+    if weight in {"1", "2", "3", "4"}:
+        low = float(weight)
+        if weight == "4":
+            conditions.extend([Game.difficulty >= 4, Game.difficulty <= 5])
+        else:
+            conditions.extend([Game.difficulty >= low, Game.difficulty < low + 1])
+    return conditions
+
+
+def game_to_dict(game):
+    return {
+        "id": game.id,
+        "source_url": game.source_url or "",
+        "title": game.title,
+        "subtitle": game.subtitle or "",
+        "image_url": game.image_url or "",
+        "video_url": game.video_url or "",
+        "material_url": game.material_url or "",
+        "year": game.year,
+        "min_players": game.min_players,
+        "max_players": game.max_players,
+        "best_players": game.best_players or "",
+        "recommended_players": game.recommended_players or "",
+        "min_time": game.min_time,
+        "max_time": game.max_time,
+        "difficulty": game.difficulty,
+        "rating": game.rating,
+        "age": game.age or "",
+        "category": game.category or "",
+        "location": game.location or "",
+        "description": game.description or "",
+    }
+
+
 @app.route("/")
 def index():
     db = DBSession()
-    games = db.scalars(select(Game).order_by(func.lower(Game.title))).all()
-    locations = sorted({clean_text(game.location) for game in games if clean_text(game.location)})
-    return render_template("index.html", games=games, locations=locations)
+    locations = db.scalars(
+        select(Game.location)
+        .where(Game.location.is_not(None), Game.location != "")
+        .distinct()
+        .order_by(func.lower(Game.location))
+    ).all()
+    total_games = db.scalar(select(func.count(Game.id))) or 0
+    return render_template("index.html", locations=locations, total_games=total_games)
+
+
+@app.route("/api/games")
+def api_games():
+    db = DBSession()
+    page = max(1, safe_int(request.args.get("page")) or 1)
+    per_page = min(96, max(12, safe_int(request.args.get("per_page")) or 48))
+    sort_mode = request.args.get("sort", "weight")
+    conditions = game_conditions()
+
+    count_stmt = select(func.count(Game.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
+    total = db.scalar(count_stmt) or 0
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages)
+
+    stmt = select(Game)
+    if conditions:
+        stmt = stmt.where(*conditions)
+    if sort_mode == "name":
+        stmt = stmt.order_by(func.lower(Game.title), Game.id)
+    else:
+        stmt = stmt.order_by(Game.difficulty.is_(None), Game.difficulty, func.lower(Game.title), Game.id)
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    games = db.scalars(stmt).all()
+
+    return jsonify({
+        "games": [game_to_dict(game) for game in games],
+        "total": total,
+        "page": page,
+        "pages": pages,
+        "per_page": per_page,
+    })
+
+
+@app.route("/api/games/random")
+def api_random_game():
+    db = DBSession()
+    conditions = game_conditions()
+    stmt = select(Game)
+    if conditions:
+        stmt = stmt.where(*conditions)
+    game = db.scalar(stmt.order_by(func.random()).limit(1))
+    if not game:
+        return jsonify({"game": None})
+    return jsonify({"game": game_to_dict(game)})
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -341,33 +322,26 @@ def admin_logout():
     return redirect(url_for("index"))
 
 
-@app.route("/admin", methods=["GET", "POST"])
+@app.route("/admin")
 @admin_required
 def admin():
     db = DBSession()
-    if request.method == "POST":
-        url = clean_text(request.form.get("url"))
-        location = clean_text(request.form.get("location")) or DEFAULT_LOCATION
-        if not validate_boardlife_url(url):
-            flash("BoardLife 게임 주소 형식이 아닙니다. 예: https://boardlife.co.kr/game/20251", "error")
-            return redirect(url_for("admin"))
-        try:
-            data = parse_boardlife(url)
-            data["location"] = location
-            game = Game(**data)
-            db.add(game)
-            db.commit()
-            flash(f"{game.title}을(를) 추가했습니다.", "success")
-        except IntegrityError:
-            db.rollback()
-            flash("이미 추가된 BoardLife 게임입니다.", "error")
-        except Exception as exc:
-            db.rollback()
-            flash(f"자동 가져오기에 실패했습니다: {exc} 직접 추가 기능을 이용할 수 있습니다.", "error")
-        return redirect(url_for("admin"))
-
-    games = db.scalars(select(Game).order_by(Game.id.desc())).all()
-    return render_template("admin.html", games=games, default_location=DEFAULT_LOCATION)
+    page = max(1, safe_int(request.args.get("page")) or 1)
+    per_page = 50
+    total = db.scalar(select(func.count(Game.id))) or 0
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages)
+    games = db.scalars(
+        select(Game).order_by(Game.id.desc()).offset((page - 1) * per_page).limit(per_page)
+    ).all()
+    return render_template(
+        "admin.html",
+        games=games,
+        default_location=DEFAULT_LOCATION,
+        total_games=total,
+        admin_page=page,
+        admin_pages=pages,
+    )
 
 
 @app.route("/admin/game/new", methods=["GET", "POST"])
@@ -384,7 +358,7 @@ def new_game():
             game = Game(source_url=source_url, **data)
             db.add(game)
             db.commit()
-            flash(f"{game.title}을(를) 직접 추가했습니다.", "success")
+            flash(f"{game.title}을(를) 추가했습니다.", "success")
             return redirect(url_for("admin"))
         except IntegrityError:
             db.rollback()
