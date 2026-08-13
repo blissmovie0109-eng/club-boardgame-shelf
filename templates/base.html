@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='admin-extra.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='family.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='quicklinks.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='backup.css') }}">
 </head>
 <body>
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -35,5 +36,6 @@
   {% endwith %}
   {% block content %}{% endblock %}
   <script src="{{ url_for('static', filename='site-fixes.js') }}"></script>
+  <script src="{{ url_for('static', filename='backup-ui.js') }}"></script>
 </body>
 </html>
