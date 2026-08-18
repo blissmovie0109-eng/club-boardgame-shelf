@@ -1,9 +1,11 @@
 (() => {
-  function addPlusTenButtons() {
+  function syncScoreButtons() {
     const scoreBoard = document.querySelector('#scoreBoard');
     if (!scoreBoard) return;
 
     scoreBoard.querySelectorAll('.score-value-row').forEach((row) => {
+      row.querySelector('[data-score-delta="-5"]')?.remove();
+
       if (row.querySelector('[data-score-delta="10"]')) return;
       const plusFive = row.querySelector('[data-score-delta="5"]');
       if (!plusFive) return;
@@ -18,11 +20,11 @@
   }
 
   function init() {
-    addPlusTenButtons();
+    syncScoreButtons();
     const scoreBoard = document.querySelector('#scoreBoard');
     if (!scoreBoard) return;
 
-    const observer = new MutationObserver(addPlusTenButtons);
+    const observer = new MutationObserver(syncScoreButtons);
     observer.observe(scoreBoard, { childList: true, subtree: true });
   }
 
