@@ -1,0 +1,3 @@
+.score-value-row{grid-template-columns:42px minmax(140px,1fr) 42px 42px 42px}
+@media(max-width:680px){.score-value-row{grid-template-columns:38px minmax(110px,1fr) 38px 38px 38px}}
+@media(max-width:420px){.score-value-row{grid-template-columns:36px minmax(100px,1fr) 36px 36px 36px}}
