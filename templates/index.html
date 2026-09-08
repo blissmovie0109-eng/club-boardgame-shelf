@@ -11,16 +11,8 @@
   <div class="club-quicklinks-inner">
     <span class="club-quicklinks-label">키리보 바로가기</span>
     <div class="club-quicklinks-actions">
-      <a class="club-link club-link-chat" href="https://open.kakao.com/o/gtuv6tic" target="_blank" rel="noopener noreferrer">
-        <span class="club-link-icon">💬</span>
-        <span><b>키리보 단톡</b><small>오픈채팅 참여하기</small></span>
-        <span class="club-link-arrow">↗</span>
-      </a>
-      <a class="club-link club-link-notice" href="https://cafe.naver.com/f-e/cafes/30264328/articles/1373?referrerAllArticles=true&amp;inCafeSearch=true&amp;query=%ED%9A%8C%EC%B9%99&amp;art=aW50ZXJuYWwtY2FmZS1hcnRpY2xlLXJlYWQtaW5DYWZlLXNlYXJjaC1saXN0.eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjYWZlVHlwZSI6IkNBRkVfSUQiLCJhcnRpY2xlSWQiOjEzNzMsImlzc3VlZEF0IjoxNzg2NTIwOTE3NzI5LCJjYWZlSWQiOjMwMjY0MzI4fQ.-j5KHSRCC1F9sYJNxkQoKLak7IlGybZpW0Oz0qewK-g" target="_blank" rel="noopener noreferrer">
-        <span class="club-link-icon">📢</span>
-        <span><b>키리보 공지사항</b><small>네이버 카페에서 보기</small></span>
-        <span class="club-link-arrow">↗</span>
-      </a>
+      <a class="club-link club-link-chat" href="https://open.kakao.com/o/gtuv6tic" target="_blank" rel="noopener noreferrer"><span class="club-link-icon">💬</span><span><b>키리보 단톡</b><small>오픈채팅 참여하기</small></span><span class="club-link-arrow">↗</span></a>
+      <a class="club-link club-link-notice" href="https://cafe.naver.com/f-e/cafes/30264328/articles/1373?referrerAllArticles=true&amp;inCafeSearch=true&amp;query=%ED%9A%8C%EC%B9%99&amp;art=aW50ZXJuYWwtY2FmZS1hcnRpY2xlLXJlYWQtaW5DYWZlLXNlYXJjaC1saXN0.eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJjYWZlVHlwZSI6IkNBRkVfSUQiLCJhcnRpY2xlSWQiOjEzNzMsImlzc3VlZEF0IjoxNzg2NTIwOTE3NzI5LCJjYWZlSWQiOjMwMjY0MzI4fQ.-j5HKSrCC1F9sYJNxkQoKLak7IlGybZpW0Oz0qewK-g" target="_blank" rel="noopener noreferrer"><span class="club-link-icon">📢</span><span><b>키리보 공지사항</b><small>네이버 카페에서 보기</small></span><span class="club-link-arrow">↗</span></a>
     </div>
   </div>
 </nav>
@@ -31,94 +23,42 @@
       <div class="sort-group"><strong>정렬:</strong><button class="sort-btn active" data-sort="weight">웨이트</button><button class="sort-btn" data-sort="name">이름순</button></div>
       <label class="collection-search"><input id="search" type="search" placeholder="게임 이름 검색"></label>
       <div class="player-group" id="playerFilters"><strong>인원:</strong><button class="filter-btn active" data-players="0">전체</button>{% for n in [2,3,4,5,6] %}<button class="filter-btn" data-players="{{n}}">{{n}}인{% if n == 6 %}+{% endif %}</button>{% endfor %}</div>
-      <label class="weight-filter">웨이트:
-        <select id="weightFilter">
-          <option value="">전체</option>
-          <option value="1">1.0~1.99</option>
-          <option value="2">2.0~2.99</option>
-          <option value="3">3.0~3.99</option>
-          <option value="4">4.0~5.0</option>
-        </select>
-      </label>
+      <label class="weight-filter">웨이트:<select id="weightFilter"><option value="">전체</option><option value="1">1.0~1.99</option><option value="2">2.0~2.99</option><option value="3">3.0~3.99</option><option value="4">4.0~5.0</option></select></label>
     </div>
-    <div class="toolbar-right">
-      <label class="location-filter">보유 장소:
-        <select id="locationFilter"><option value="">전체보기</option>{% for location in locations %}<option value="{{ location|lower }}">{{ location }}</option>{% endfor %}</select>
-      </label>
-      <span class="count-badge"><b id="visibleCount">{{ total_games }}</b>개</span>
-    </div>
+    <div class="toolbar-right"><label class="location-filter">보유 장소:<select id="locationFilter"><option value="">전체보기</option>{% for location in locations %}<option value="{{ location|lower }}">{{ location }}</option>{% endfor %}</select></label><span class="count-badge"><b id="visibleCount">{{ total_games }}</b>개</span></div>
   </section>
 
   <section class="picker-panel">
-    <div class="picker-copy">
-      <span class="picker-eyebrow">BOARD GAME TOOL</span>
-      <h2>보드게임 도구 모음</h2>
-      <p>선 정하기, 점수·팀 나누기, 랜덤 게임 뽑기를 한곳에서 이용해보세요.</p>
-    </div>
+    <div class="picker-copy"><span class="picker-eyebrow">BOARD GAME TOOL</span><h2>보드게임 도구 모음</h2><p>선 정하기, 재미있는 팀 나누기, 랜덤 게임 뽑기를 한곳에서 이용해보세요.</p></div>
     <div class="picker-tools">
       <button id="firstPlayerOpen" class="first-player-open" type="button"><span class="target-orb">🎯</span><span><b>선 정하기</b><small>손가락 또는 인원수로</small></span></button>
+      <button id="teamPickerOpen" class="team-picker-open" type="button"><span class="team-orb">🎲</span><span><b>재미로 팀 나누기</b><small>손가락을 올리고 운명을 맡겨보세요</small></span></button>
       <button id="randomPick" class="random-hero-button" type="button"><span class="dice-orb">🎲</span><span><b>랜덤 게임 뽑기</b><small>오늘의 선택 보기</small></span></button>
     </div>
   </section>
 
-  <section id="todayPick" class="today-pick hidden" aria-live="polite">
-    <div class="today-pick-label">✨ 오늘의 선택</div>
-    <div class="today-pick-content">
-      <div class="today-pick-cover" id="todayPickCover"></div>
-      <div class="today-pick-copy">
-        <h2 id="todayPickTitle"></h2>
-        <p id="todayPickSubtitle" class="muted"></p>
-        <div id="todayPickFacts" class="today-pick-facts"></div>
-        <div id="todayPickActions" class="today-pick-actions"></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="collection-grid" id="grid" aria-live="polite"></section>
-  <div id="empty" class="empty hidden">조건에 맞는 게임이 없습니다.</div>
-
-  <nav id="pager" class="pager hidden" aria-label="게임 목록 페이지">
-    <button id="prevPage" type="button">← 이전</button>
-    <span id="pageInfo"></span>
-    <button id="nextPage" type="button">다음 →</button>
-  </nav>
+  <section id="todayPick" class="today-pick hidden" aria-live="polite"><div class="today-pick-label">✨ 오늘의 선택</div><div class="today-pick-content"><div class="today-pick-cover" id="todayPickCover"></div><div class="today-pick-copy"><h2 id="todayPickTitle"></h2><p id="todayPickSubtitle" class="muted"></p><div id="todayPickFacts" class="today-pick-facts"></div><div id="todayPickActions" class="today-pick-actions"></div></div></div></section>
+  <section class="collection-grid" id="grid" aria-live="polite"></section><div id="empty" class="empty hidden">조건에 맞는 게임이 없습니다.</div>
+  <nav id="pager" class="pager hidden" aria-label="게임 목록 페이지"><button id="prevPage" type="button">← 이전</button><span id="pageInfo"></span><button id="nextPage" type="button">다음 →</button></nav>
 </main>
 
 <div id="firstPlayerModal" class="first-player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstPlayerTitle">
-  <div class="first-player-shell">
-    <button id="firstPlayerClose" class="first-player-close" type="button" aria-label="선 정하기 닫기">×</button>
-    <div class="first-player-heading">
-      <span class="first-player-kicker">BOARD GAME TOOL</span>
-      <h2 id="firstPlayerTitle">🎯 선 정하기</h2>
-      <p>이름 입력 없이 바로 골라보세요.</p>
-    </div>
-
-    <section class="finger-picker-section">
-      <div class="first-player-section-title"><b>손가락으로 정하기</b><span>모두 한 손가락씩 화면에 올려주세요</span></div>
-      <div id="touchArena" class="touch-arena">
-        <div class="touch-arena-guide">
-          <div class="touch-hand">☝️</div>
-          <b id="touchGuideTitle">2명 이상 손가락을 올려주세요</b>
-          <span id="touchGuideText">손가락이 모이면 자동으로 추첨합니다.</span>
-        </div>
-        <div id="touchPoints" class="touch-points"></div>
-        <div id="touchCountdown" class="touch-countdown hidden"></div>
-        <div id="touchWinner" class="touch-winner hidden"><span>🎉</span><b>이 손가락이 선!</b></div>
-      </div>
-      <button id="touchReset" class="touch-reset hidden" type="button">다시 뽑기</button>
-    </section>
-
-    <section class="number-picker-section">
-      <div class="first-player-section-title"><b>인원수로 바로 정하기</b><span>테이블이 크거나 멀리 앉아 있을 때</span></div>
-      <div id="playerNumberButtons" class="player-number-buttons">
-        {% for n in range(2, 11) %}<button type="button" data-count="{{ n }}">{{ n }}명</button>{% endfor %}
-      </div>
-      <div id="numberPickResult" class="number-pick-result hidden" aria-live="polite"></div>
-    </section>
+  <div class="first-player-shell"><button id="firstPlayerClose" class="first-player-close" type="button" aria-label="선 정하기 닫기">×</button><div class="first-player-heading"><span class="first-player-kicker">BOARD GAME TOOL</span><h2 id="firstPlayerTitle">🎯 선 정하기</h2><p>이름 입력 없이 바로 골라보세요.</p></div>
+    <section class="finger-picker-section"><div class="first-player-section-title"><b>손가락으로 정하기</b><span>모두 한 손가락씩 화면에 올려주세요</span></div><div id="touchArena" class="touch-arena"><div class="touch-arena-guide"><div class="touch-hand">☝️</div><b id="touchGuideTitle">2명 이상 손가락을 올려주세요</b><span id="touchGuideText">손가락이 모이면 자동으로 추첨합니다.</span></div><div id="touchPoints" class="touch-points"></div><div id="touchCountdown" class="touch-countdown hidden"></div><div id="touchWinner" class="touch-winner hidden"><span>🎉</span><b>이 손가락이 선!</b></div></div><button id="touchReset" class="touch-reset hidden" type="button">다시 뽑기</button></section>
+    <section class="number-picker-section"><div class="first-player-section-title"><b>인원수로 바로 정하기</b><span>테이블이 크거나 멀리 앉아 있을 때</span></div><div id="playerNumberButtons" class="player-number-buttons">{% for n in range(2, 11) %}<button type="button" data-count="{{ n }}">{{ n }}명</button>{% endfor %}</div><div id="numberPickResult" class="number-pick-result hidden" aria-live="polite"></div></section>
   </div>
 </div>
 
-<link rel="stylesheet" href="{{ url_for('static', filename='first-player.css') }}">
-<script src="{{ url_for('static', filename='app.js') }}"></script>
-<script src="{{ url_for('static', filename='first-player.js') }}"></script>
+<div id="teamPickerModal" class="team-picker-modal hidden" role="dialog" aria-modal="true" aria-labelledby="teamPickerTitle">
+  <div class="team-picker-shell">
+    <button id="teamPickerClose" class="first-player-close" type="button" aria-label="팀 나누기 닫기">×</button>
+    <div class="first-player-heading"><span class="first-player-kicker">TEAM RANDOMIZER</span><h2 id="teamPickerTitle">🎲 재미로 팀 나누기</h2><p>이름 입력 없이 손가락만 올리면 팀이 결정됩니다.</p></div>
+    <section class="team-picker-section"><div class="team-picker-title"><b>몇 팀으로 나눌까요?</b><span id="selectedTeamCount">2팀</span></div><div id="teamCountButtons" class="team-count-buttons">{% for n in range(2, 7) %}<button type="button" data-count="{{ n }}">{{ n }}팀</button>{% endfor %}</div></section>
+    <section class="team-picker-section"><div class="team-picker-title"><b>모두 손가락을 올려주세요</b><span>최소 팀 수만큼 필요해요</span></div><div id="teamTouchArena" class="team-touch-arena"><div class="team-arena-guide"><div class="team-hand">☝️☝️</div><b id="teamGuideTitle">먼저 팀 수를 골라주세요</b><span id="teamGuideText">2~6팀 중 원하는 팀 수를 선택하세요.</span></div><div id="teamTouchPoints" class="team-touch-points"></div><div id="teamCountdown" class="team-countdown hidden"></div></div></section>
+    <div id="teamResult" class="team-result hidden" aria-live="polite"></div>
+    <div class="team-actions"><button id="teamReset" class="team-action secondary hidden" type="button">처음부터</button><button id="teamShuffle" class="team-action primary hidden" type="button">🔀 다시 섞기</button></div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='first-player.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='team-picker.css') }}"><script src="{{ url_for('static', filename='app.js') }}"></script><script src="{{ url_for('static', filename='first-player.js') }}"></script><script src="{{ url_for('static', filename='team-picker.js') }}"></script>
 {% endblock %}
