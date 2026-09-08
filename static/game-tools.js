@@ -4,7 +4,7 @@
 
   pickerTools.classList.add('game-tools-ready');
   if (!document.querySelector('#gameToolsOpen')) {
-    const buttonMarkup = `<button id="gameToolsOpen" class="game-tools-open" type="button"><span class="score-orb">📊</span><span><b>점수 · 팀 나누기</b><small>2~6팀 게임 도구</small></span></button>`;
+    const buttonMarkup = `<button id="gameToolsOpen" class="game-tools-open" type="button"><span class="score-orb">📊</span><span><b>점수판 · 팀 나누기(수동)</b><small>팀/개인 점수 + 수동 팀 구성</small></span></button>`;
     const randomButton = pickerTools.querySelector('#randomPick');
     if (randomButton) randomButton.insertAdjacentHTML('beforebegin', buttonMarkup);
     else pickerTools.insertAdjacentHTML('beforeend', buttonMarkup);
@@ -17,18 +17,22 @@
           <button id="gameToolsClose" class="game-tools-close" type="button" aria-label="게임 도구 닫기">×</button>
           <div class="game-tools-heading">
             <span class="game-tools-kicker">BOARD GAME TOOL</span>
-            <h2 id="gameToolsTitle">📊 점수판 · 팀 나누기</h2>
-            <p>팀을 나누고 바로 점수를 기록해보세요.</p>
+            <h2 id="gameToolsTitle">📊 점수판 · 팀 나누기(수동)</h2>
+            <p>팀 게임은 팀별로, 파티게임은 개인별로 점수를 기록해보세요.</p>
           </div>
           <div class="game-tools-tabs" role="tablist">
             <button type="button" class="active" data-game-tool-tab="score" role="tab" aria-selected="true">점수판</button>
-            <button type="button" data-game-tool-tab="team" role="tab" aria-selected="false">팀 나누기</button>
+            <button type="button" data-game-tool-tab="team" role="tab" aria-selected="false">팀 나누기(수동)</button>
           </div>
           <section class="game-tool-panel" data-game-tool-panel="score">
             <div class="game-tool-toolbar">
-              <div class="game-tool-toolbar-copy"><h3>점수판</h3><p>2~6팀의 이름과 점수를 자유롭게 관리합니다.</p></div>
+              <div class="game-tool-toolbar-copy"><h3>점수판</h3><p>팀 게임 또는 개인 점수판으로 사용할 수 있습니다.</p></div>
               <div class="game-tool-actions">
-                <label>팀 수 <select id="scoreTeamCount">${[2,3,4,5,6].map((n) => `<option value="${n}">${n}팀</option>`).join('')}</select></label>
+                <div class="score-mode-tabs" role="group" aria-label="점수판 방식">
+                  <button type="button" class="active" data-score-mode="team">팀</button>
+                  <button type="button" data-score-mode="individual">개인</button>
+                </div>
+                <label id="scoreCountLabel">팀 수 <select id="scoreCount"></select></label>
                 <button id="scoreReset" class="game-tool-secondary" type="button">점수 0으로</button>
               </div>
             </div>
@@ -36,7 +40,7 @@
           </section>
           <section class="game-tool-panel hidden" data-game-tool-panel="team">
             <div class="game-tool-toolbar">
-              <div class="game-tool-toolbar-copy"><h3>팀 나누기</h3><p>균등하게 섞은 뒤 원하는 사람을 다른 팀으로 옮길 수 있습니다.</p></div>
+              <div class="game-tool-toolbar-copy"><h3>팀 나누기(수동)</h3><p>참가자 이름을 입력한 뒤 균등하게 섞고, 원하는 사람은 다른 팀으로 옮길 수 있습니다.</p></div>
             </div>
             <div class="team-split-input">
               <label class="team-member-field">참가자 이름 <textarea id="teamMemberInput" placeholder="예: 민수, 지영, 철수\n또는 한 줄에 한 명씩 입력"></textarea></label>
@@ -60,9 +64,11 @@
   const closeButton = modal.querySelector('#gameToolsClose');
   const tabButtons = [...modal.querySelectorAll('[data-game-tool-tab]')];
   const panels = [...modal.querySelectorAll('[data-game-tool-panel]')];
-  const scoreTeamCount = modal.querySelector('#scoreTeamCount');
   const scoreBoard = modal.querySelector('#scoreBoard');
+  const scoreCount = modal.querySelector('#scoreCount');
+  const scoreCountLabel = modal.querySelector('#scoreCountLabel');
   const scoreReset = modal.querySelector('#scoreReset');
+  const scoreModeButtons = [...modal.querySelectorAll('[data-score-mode]')];
   const memberInput = modal.querySelector('#teamMemberInput');
   const splitTeamCount = modal.querySelector('#splitTeamCount');
   const splitButton = modal.querySelector('#splitTeams');
@@ -70,64 +76,69 @@
   const splitEmpty = modal.querySelector('#splitEmpty');
   const applySplit = modal.querySelector('#applySplitToScore');
 
-  const STORAGE_KEY = 'kiribo-game-tools-v1';
+  const STORAGE_KEY = 'kiribo-game-tools-v2';
   const MIN_TEAMS = 2;
   const MAX_TEAMS = 6;
+  const MAX_INDIVIDUALS = 12;
 
-  const defaultTeam = (index) => ({ name: `${index + 1}팀`, score: 0, members: [] });
+  const defaultEntry = (index, mode) => ({ name: mode === 'individual' ? `${index + 1}번` : `${index + 1}팀`, score: 0, members: [] });
 
   let state = {
-    scoreTeams: Array.from({ length: 2 }, (_, index) => defaultTeam(index)),
+    scoreMode: 'team',
+    scoreEntries: Array.from({ length: 2 }, (_, index) => defaultEntry(index, 'team')),
     splitTeamCount: 2,
     splitTeamNames: ['1팀', '2팀'],
     splitAssignments: [],
     memberDraft: '',
   };
 
-  function clampTeamCount(value) {
-    const count = Number(value) || MIN_TEAMS;
-    return Math.max(MIN_TEAMS, Math.min(MAX_TEAMS, count));
+  function clampCount(value, min, max) {
+    const count = Number(value) || min;
+    return Math.max(min, Math.min(max, count));
   }
 
   function escapeHtml(value = '') {
     return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   }
 
-  function normalizeScoreTeams(value) {
-    if (!Array.isArray(value)) return null;
-    const count = clampTeamCount(value.length);
-    const normalized = [];
-    for (let index = 0; index < count; index += 1) {
-      const source = value[index] || {};
-      normalized.push({
-        name: String(source.name || `${index + 1}팀`).slice(0, 30),
-        score: Number.isFinite(Number(source.score)) ? Number(source.score) : 0,
-        members: Array.isArray(source.members) ? source.members.map((name) => String(name).slice(0, 40)).filter(Boolean) : [],
-      });
-    }
-    return normalized;
+  function countOptions(mode) {
+    const max = mode === 'individual' ? MAX_INDIVIDUALS : MAX_TEAMS;
+    return Array.from({ length: max - MIN_TEAMS + 1 }, (_, i) => i + MIN_TEAMS);
+      
+  }
+
+  function ensureScoreEntries(count, mode = state.scoreMode) {
+    const max = mode === 'individual' ? MAX_INDIVIDUALS : MAX_TEAMS;
+    const target = clampCount(count, MIN_TEAMS, max);
+    const next = state.scoreEntries.slice(0, target).map((entry, index) => ({
+      name: String(entry?.name || defaultEntry(index, mode).name).slice(0, 30),
+      score: Number.isFinite(Number(entry?.score)) ? Number(entry.score) : 0,
+      members: Array.isArray(entry?.members) ? entry.members.map((name) => String(name).slice(0, 40)).filter(Boolean) : [],
+    }));
+    while (next.length < target) next.push(defaultEntry(next.length, mode));
+    if (mode === 'individual') next.forEach((entry, index) => { if (!entry.name || /팀$/.test(entry.name)) entry.name = `${index + 1}번`; entry.members = []; });
+    state.scoreEntries = next;
+    return target;
   }
 
   function loadState() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
       if (!saved || typeof saved !== 'object') return;
-      const scoreTeams = normalizeScoreTeams(saved.scoreTeams);
-      if (scoreTeams) state.scoreTeams = scoreTeams;
-      state.splitTeamCount = clampTeamCount(saved.splitTeamCount || 2);
-      state.splitTeamNames = Array.isArray(saved.splitTeamNames)
-        ? saved.splitTeamNames.slice(0, state.splitTeamCount).map((name, index) => String(name || `${index + 1}팀`).slice(0, 30))
-        : [];
+      state.scoreMode = saved.scoreMode === 'individual' ? 'individual' : 'team';
+      const savedEntries = Array.isArray(saved.scoreEntries) ? saved.scoreEntries : (Array.isArray(saved.scoreTeams) ? saved.scoreTeams : null);
+      if (savedEntries) {
+        state.scoreEntries = savedEntries.slice(0, MAX_INDIVIDUALS).map((entry, index) => ({
+          name: String(entry?.name || `${index + 1}${state.scoreMode === 'individual' ? '번' : '팀'}`).slice(0, 30),
+          score: Number.isFinite(Number(entry?.score)) ? Number(entry.score) : 0,
+          members: Array.isArray(entry?.members) ? entry.members.map((name) => String(name).slice(0, 40)).filter(Boolean) : [],
+        }));
+      }
+      ensureScoreEntries(state.scoreEntries.length || 2, state.scoreMode);
+      state.splitTeamCount = clampCount(saved.splitTeamCount || 2, MIN_TEAMS, MAX_TEAMS);
+      state.splitTeamNames = Array.isArray(saved.splitTeamNames) ? saved.splitTeamNames.slice(0, state.splitTeamCount).map((name, index) => String(name || `${index + 1}팀`).slice(0, 30)) : [];
       while (state.splitTeamNames.length < state.splitTeamCount) state.splitTeamNames.push(`${state.splitTeamNames.length + 1}팀`);
-      state.splitAssignments = Array.isArray(saved.splitAssignments)
-        ? saved.splitAssignments.slice(0, state.splitTeamCount).map((team) => Array.isArray(team)
-            ? team.map((member, memberIndex) => ({
-                id: String(member?.id || `saved-${Date.now()}-${memberIndex}-${Math.random()}`),
-                name: String(member?.name || '').slice(0, 40),
-              })).filter((member) => member.name)
-            : [])
-        : [];
-      while (state.splitAssignments.length < state.splitTeamCount && state.splitAssignments.length) state.splitAssignments.push([]);
+      state.splitAssignments = Array.isArray(saved.splitAssignments) ? saved.splitAssignments.slice(0, state.splitTeamCount).map((team) => Array.isArray(team) ? team.map((member, memberIndex) => ({ id: String(member?.id || `saved-${Date.now()}-${memberIndex}-${Math.random()}`), name: String(member?.name || '').slice(0, 40) })).filter((member) => member.name) : []) : [];
       state.memberDraft = String(saved.memberDraft || '').slice(0, 2000);
     } catch (error) {
       console.warn('게임 도구 상태를 불러오지 못했습니다.', error);
@@ -135,8 +146,7 @@
   }
 
   function saveState() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-    catch (error) { console.warn('게임 도구 상태를 저장하지 못했습니다.', error); }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (error) { console.warn('게임 도구 상태를 저장하지 못했습니다.', error); }
   }
 
   function setActiveTab(name) {
@@ -148,31 +158,32 @@
     panels.forEach((panel) => panel.classList.toggle('hidden', panel.dataset.gameToolPanel !== name));
   }
 
-  function resizeScoreTeams(count) {
-    const target = clampTeamCount(count);
-    const next = state.scoreTeams.slice(0, target);
-    while (next.length < target) next.push(defaultTeam(next.length));
-    state.scoreTeams = next;
-    renderScoreBoard();
-    saveState();
+  function renderScoreCountOptions() {
+    const max = state.scoreMode === 'individual' ? MAX_INDIVIDUALS : MAX_TEAMS;
+    const current = clampCount(state.scoreEntries.length || 2, MIN_TEAMS, max);
+    scoreCount.innerHTML = countOptions(state.scoreMode).map((n) => `<option value="${n}">${n}${state.scoreMode === 'individual' ? '명' : '팀'}</option>`).join('');
+    scoreCount.value = String(current);
+    scoreCountLabel.firstChild.textContent = state.scoreMode === 'individual' ? '인원 수 ' : '팀 수 ';
   }
 
   function renderScoreBoard() {
-    scoreTeamCount.value = String(state.scoreTeams.length);
-    scoreBoard.innerHTML = state.scoreTeams.map((team, index) => {
-      const members = team.members.length
-        ? `<div class="score-team-members">${team.members.map((name) => `<span>${escapeHtml(name)}</span>`).join('')}</div>`
-        : '<div class="score-team-members muted-members">팀원을 나누면 여기에 표시됩니다.</div>';
-      return `<article class="score-team-card" data-score-team="${index}">
+    ensureScoreEntries(state.scoreEntries.length || 2, state.scoreMode);
+    scoreModeButtons.forEach((button) => button.classList.toggle('active', button.dataset.scoreMode === state.scoreMode));
+    renderScoreCountOptions();
+    scoreBoard.innerHTML = state.scoreEntries.map((entry, index) => {
+      const members = state.scoreMode === 'team'
+        ? (entry.members.length ? `<div class="score-team-members">${entry.members.map((name) => `<span>${escapeHtml(name)}</span>`).join('')}</div>` : '<div class="score-team-members muted-members">팀원을 나누면 여기에 표시됩니다.</div>')
+        : '';
+      return `<article class="score-team-card" data-score-entry="${index}">
         <div class="score-team-heading">
-          <span class="team-number">TEAM ${index + 1}</span>
-          <input class="score-team-name" data-score-team-name="${index}" value="${escapeHtml(team.name)}" maxlength="30" aria-label="${index + 1}팀 이름">
+          <span class="team-number">${state.scoreMode === 'individual' ? `PLAYER ${index + 1}` : `TEAM ${index + 1}`}</span>
+          <input class="score-team-name" data-score-entry-name="${index}" value="${escapeHtml(entry.name)}" maxlength="30" aria-label="${state.scoreMode === 'individual' ? `${index + 1}번 선수 이름` : `${index + 1}팀 이름`}">
         </div>
         ${members}
         <div class="score-value-row">
           <button type="button" data-score-delta="-5" aria-label="5점 빼기">−5</button>
           <button type="button" data-score-delta="-1" aria-label="1점 빼기">−1</button>
-          <input class="score-value" data-score-value="${index}" type="number" step="1" value="${Number(team.score)}" aria-label="${escapeHtml(team.name)} 점수">
+          <input class="score-value" data-score-value="${index}" type="number" step="1" value="${Number(entry.score)}" aria-label="${escapeHtml(entry.name)} 점수">
           <button type="button" data-score-delta="1" aria-label="1점 더하기">+1</button>
           <button type="button" data-score-delta="5" aria-label="5점 더하기">+5</button>
         </div>
@@ -180,8 +191,22 @@
     }).join('');
   }
 
+  function switchScoreMode(mode) {
+    state.scoreMode = mode === 'individual' ? 'individual' : 'team';
+    const current = state.scoreEntries.length || 2;
+    ensureScoreEntries(Math.min(current, state.scoreMode === 'individual' ? MAX_INDIVIDUALS : MAX_TEAMS), state.scoreMode);
+    renderScoreBoard();
+    saveState();
+  }
+
+  function resizeScoreEntries(count) {
+    ensureScoreEntries(count, state.scoreMode);
+    renderScoreBoard();
+    saveState();
+  }
+
   function ensureSplitArrays(count) {
-    const target = clampTeamCount(count);
+    const target = clampCount(count, MIN_TEAMS, MAX_TEAMS);
     state.splitTeamCount = target;
     state.splitTeamNames = state.splitTeamNames.slice(0, target);
     while (state.splitTeamNames.length < target) state.splitTeamNames.push(`${state.splitTeamNames.length + 1}팀`);
@@ -207,7 +232,7 @@
 
   function splitMembers() {
     const names = parseMembers();
-    const teamCount = clampTeamCount(splitTeamCount.value);
+    const teamCount = clampCount(splitTeamCount.value, MIN_TEAMS, MAX_TEAMS);
     ensureSplitArrays(teamCount);
     if (names.length < teamCount) {
       splitEmpty.textContent = `팀 수보다 참가자가 적습니다. 최소 ${teamCount}명을 입력해주세요.`;
@@ -258,11 +283,8 @@
   }
 
   function applySplitToScoreboard() {
-    state.scoreTeams = state.splitAssignments.map((members, index) => ({
-      name: state.splitTeamNames[index] || `${index + 1}팀`,
-      score: 0,
-      members: members.map((member) => member.name),
-    }));
+    state.scoreMode = 'team';
+    state.scoreEntries = state.splitAssignments.map((members, index) => ({ name: state.splitTeamNames[index] || `${index + 1}팀`, score: 0, members: members.map((member) => member.name) }));
     renderScoreBoard();
     saveState();
     setActiveTab('score');
@@ -283,8 +305,6 @@
   }
 
   loadState();
-  memberInput.value = state.memberDraft;
-  splitTeamCount.value = String(state.splitTeamCount);
   renderScoreBoard();
   renderSplitResult();
 
@@ -292,59 +312,50 @@
   closeButton.addEventListener('click', closeModal);
   modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
+
   tabButtons.forEach((button) => button.addEventListener('click', () => setActiveTab(button.dataset.gameToolTab)));
-  scoreTeamCount.addEventListener('change', () => resizeScoreTeams(scoreTeamCount.value));
-  scoreReset.addEventListener('click', () => {
-    state.scoreTeams.forEach((team) => { team.score = 0; });
-    renderScoreBoard();
-    saveState();
-  });
+  scoreModeButtons.forEach((button) => button.addEventListener('click', () => switchScoreMode(button.dataset.scoreMode)));
+  scoreCount.addEventListener('change', () => resizeScoreEntries(scoreCount.value));
+  scoreReset.addEventListener('click', () => { state.scoreEntries.forEach((entry) => { entry.score = 0; }); renderScoreBoard(); saveState(); });
+
   scoreBoard.addEventListener('click', (event) => {
     const button = event.target.closest('[data-score-delta]');
     if (!button) return;
-    const card = button.closest('[data-score-team]');
-    const teamIndex = Number(card?.dataset.scoreTeam);
-    if (!Number.isInteger(teamIndex) || !state.scoreTeams[teamIndex]) return;
-    state.scoreTeams[teamIndex].score += Number(button.dataset.scoreDelta) || 0;
-    renderScoreBoard();
+    const card = button.closest('[data-score-entry]');
+    const index = Number(card?.dataset.scoreEntry);
+    if (!Number.isInteger(index) || !state.scoreEntries[index]) return;
+    state.scoreEntries[index].score += Number(button.dataset.scoreDelta || 0);
+    const input = card.querySelector('[data-score-value]');
+    if (input) input.value = String(state.scoreEntries[index].score);
     saveState();
   });
+
   scoreBoard.addEventListener('input', (event) => {
-    if (event.target.matches('[data-score-team-name]')) {
-      const teamIndex = Number(event.target.dataset.scoreTeamName);
-      if (state.scoreTeams[teamIndex]) {
-        state.scoreTeams[teamIndex].name = event.target.value.slice(0, 30) || `${teamIndex + 1}팀`;
-        saveState();
-      }
+    const nameInput = event.target.closest('[data-score-entry-name]');
+    if (nameInput) {
+      const index = Number(nameInput.dataset.scoreEntryName);
+      if (state.scoreEntries[index]) { state.scoreEntries[index].name = nameInput.value.slice(0, 30); saveState(); }
+      return;
+    }
+    const scoreInput = event.target.closest('[data-score-value]');
+    if (scoreInput) {
+      const index = Number(scoreInput.dataset.scoreValue);
+      if (state.scoreEntries[index]) { state.scoreEntries[index].score = Number(scoreInput.value) || 0; saveState(); }
     }
   });
-  scoreBoard.addEventListener('change', (event) => {
-    if (event.target.matches('[data-score-value]')) {
-      const teamIndex = Number(event.target.dataset.scoreValue);
-      if (state.scoreTeams[teamIndex]) {
-        const nextScore = Number(event.target.value);
-        state.scoreTeams[teamIndex].score = Number.isFinite(nextScore) ? nextScore : 0;
-        renderScoreBoard();
-        saveState();
-      }
-    }
-  });
-  memberInput.addEventListener('input', () => { state.memberDraft = memberInput.value.slice(0, 2000); saveState(); });
-  splitTeamCount.addEventListener('change', () => { ensureSplitArrays(splitTeamCount.value); renderSplitResult(); saveState(); });
+
   splitButton.addEventListener('click', splitMembers);
-  applySplit.addEventListener('click', applySplitToScoreboard);
-  splitResult.addEventListener('input', (event) => {
-    if (!event.target.matches('[data-split-team-name]')) return;
-    const teamIndex = Number(event.target.dataset.splitTeamName);
-    if (!Number.isInteger(teamIndex)) return;
-    state.splitTeamNames[teamIndex] = event.target.value.slice(0, 30) || `${teamIndex + 1}팀`;
-    saveState();
-  });
+  splitTeamCount.addEventListener('change', () => { ensureSplitArrays(splitTeamCount.value); renderSplitResult(); saveState(); });
+  memberInput.addEventListener('input', () => { state.memberDraft = memberInput.value; saveState(); });
   splitResult.addEventListener('change', (event) => {
-    if (!event.target.matches('[data-move-member]')) return;
-    const fromTeam = Number(event.target.dataset.fromTeam);
-    const toTeam = Number(event.target.value);
-    if (fromTeam === toTeam) return;
-    moveMember(event.target.dataset.moveMember, fromTeam, toTeam);
+    const move = event.target.closest('[data-move-member]');
+    if (move) moveMember(move.dataset.moveMember, Number(move.dataset.fromTeam), Number(move.value));
+    const teamName = event.target.closest('[data-split-team-name]');
+    if (teamName) { state.splitTeamNames[Number(teamName.dataset.splitTeamName)] = teamName.value.slice(0, 30); saveState(); }
   });
+  splitResult.addEventListener('input', (event) => {
+    const teamName = event.target.closest('[data-split-team-name]');
+    if (teamName) { state.splitTeamNames[Number(teamName.dataset.splitTeamName)] = teamName.value.slice(0, 30); saveState(); }
+  });
+  applySplit.addEventListener('click', applySplitToScoreboard);
 })();
