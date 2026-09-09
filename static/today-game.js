@@ -9,7 +9,7 @@
       const link = card.querySelector('[data-today-game-link]');
       if (title) title.textContent = data.title;
       if (link) link.href = data.cafe_url;
-      card.classList.remove('hidden');
+      card.style.display = '';
     })
     .catch(() => {});
 })();
