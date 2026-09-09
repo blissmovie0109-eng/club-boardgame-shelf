@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
-from flask import Response, flash, redirect, request, url_for
+from flask import Response, flash, redirect, request, url_for, render_template
 from sqlalchemy import func, select
 import app as app_module
 app = app_module.app
@@ -68,3 +68,18 @@ def admin_backup_restore():
     flash(f"백업 복원 완료: 새로 추가 {added}개 · 백업값으로 갱신 {updated}개 · 건너뜀 {skipped}개. 현재 DB에만 있던 게임은 삭제하지 않았습니다.", "success"); return redirect(url_for("admin"))
 
 import today_game  # noqa: E402,F401
+
+# Homepage badge: show every stored game, including expansions.
+_original_index = app.view_functions.get("index")
+if _original_index:
+    def _index_with_all_game_count(*args, **kwargs):
+        db = app_module.DBSession()
+        locations = db.scalars(
+            select(app_module.Game.location)
+            .where(app_module.Game.location.is_not(None), app_module.Game.location != "")
+            .distinct()
+            .order_by(app_module.Game.location)
+        ).all()
+        total_games = db.scalar(select(func.count(app_module.Game.id))) or 0
+        return render_template("index.html", locations=locations, total_games=total_games)
+    app.view_functions["index"] = _index_with_all_game_count
