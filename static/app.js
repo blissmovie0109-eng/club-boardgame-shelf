@@ -16,6 +16,7 @@ const todayPickSubtitle = document.querySelector('#todayPickSubtitle');
 const todayPickFacts = document.querySelector('#todayPickFacts');
 const todayPickActions = document.querySelector('#todayPickActions');
 
+const homepageTotalGames = Number(visibleCount?.textContent || 0);
 let sortMode = 'weight';
 let players = 0;
 let page = 1;
@@ -143,7 +144,8 @@ async function loadGames({ resetPage = false } = {}) {
     if (token !== requestToken) return;
     page = data.page;
     pages = data.pages;
-    if (visibleCount) visibleCount.textContent = data.total;
+    const hasFilters = Boolean((search?.value || '').trim() || locationFilter?.value || weightFilter?.value || players);
+    if (visibleCount) visibleCount.textContent = hasFilters ? data.total : homepageTotalGames;
     if (grid) grid.innerHTML = data.games.map(cardHtml).join('');
     if (empty) empty.classList.toggle('hidden', data.total !== 0);
     if (pager) pager.classList.toggle('hidden', data.total === 0 || pages <= 1);
