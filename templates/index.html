@@ -17,13 +17,13 @@
   </div>
 </nav>
 
-<section id="todayGameCard" class="club-quicklinks" style="display:none" aria-label="오늘의 게임">
+<section id="todayGameCard" class="club-quicklinks" aria-label="오늘의 게임">
   <div class="club-quicklinks-inner">
     <span class="club-quicklinks-label">🎲 오늘의 게임</span>
     <div class="club-quicklinks-actions">
-      <a class="club-link club-link-notice" data-today-game-link href="#" target="_blank" rel="noopener noreferrer">
+      <a class="club-link club-link-notice" data-today-game-link href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">
         <span class="club-link-icon">🎲</span>
-        <span><b data-today-game-title>오늘의 게임</b><small>네이버 카페에서 보기</small></span>
+        <span><b data-today-game-title>오늘의 게임 준비 중</b><small>네이버 카페에서 보기</small></span>
         <span class="club-link-arrow">↗</span>
       </a>
       {% if session.get('admin') %}<a class="club-link" href="{{ url_for('admin_today_game') }}"><span class="club-link-icon">⚙️</span><span><b>관리</b><small>오늘의 게임 수정</small></span></a>{% endif %}
