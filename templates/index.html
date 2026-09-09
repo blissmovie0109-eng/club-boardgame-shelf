@@ -17,6 +17,20 @@
   </div>
 </nav>
 
+<section id="todayGameCard" class="club-quicklinks" style="display:none" aria-label="오늘의 게임">
+  <div class="club-quicklinks-inner">
+    <span class="club-quicklinks-label">🎲 오늘의 게임</span>
+    <div class="club-quicklinks-actions">
+      <a class="club-link club-link-notice" data-today-game-link href="#" target="_blank" rel="noopener noreferrer">
+        <span class="club-link-icon">🎲</span>
+        <span><b data-today-game-title>오늘의 게임</b><small>네이버 카페에서 보기</small></span>
+        <span class="club-link-arrow">↗</span>
+      </a>
+      {% if session.get('admin') %}<a class="club-link" href="{{ url_for('admin_today_game') }}"><span class="club-link-icon">⚙️</span><span><b>관리</b><small>오늘의 게임 수정</small></span></a>{% endif %}
+    </div>
+  </div>
+</section>
+
 <main class="collection-page">
   <section class="collection-toolbar">
     <div class="toolbar-left">
@@ -60,5 +74,5 @@
   </div>
 </div>
 
-<link rel="stylesheet" href="{{ url_for('static', filename='first-player.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='team-picker.css') }}"><script src="{{ url_for('static', filename='app.js') }}"></script><script src="{{ url_for('static', filename='first-player.js') }}"></script><script src="{{ url_for('static', filename='team-picker.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='first-player.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='team-picker.css') }}"><script src="{{ url_for('static', filename='app.js') }}"></script><script src="{{ url_for('static', filename='first-player.js') }}"></script><script src="{{ url_for('static', filename='team-picker.js') }}"></script><script src="{{ url_for('static', filename='today-game.js') }}"></script>
 {% endblock %}
