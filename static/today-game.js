@@ -3,8 +3,20 @@
   const feature = document.getElementById('todayGameFeature');
   if (!card && !feature) return;
 
+  const isAdmin = !!(card && card.querySelector('.today-game-admin'));
+
   const hide = () => {
-    if (card) card.style.display = 'none';
+    if (card) {
+      // 관리 모드에서는 아직 오늘의 게임을 등록하지 않았더라도
+      // 설정 버튼이 보이도록 카드 자체는 유지한다.
+      if (isAdmin) {
+        card.style.display = '';
+        const title = card.querySelector('[data-today-game-title]');
+        if (title) title.textContent = '오늘의 게임 등록하기';
+      } else {
+        card.style.display = 'none';
+      }
+    }
     if (feature) feature.classList.add('hidden');
   };
 
