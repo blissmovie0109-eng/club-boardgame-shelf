@@ -11,7 +11,8 @@
 .club-link-chat:hover{border-color:#e5ca37}
 .club-link-notice{background:linear-gradient(135deg,#eafaf0 0%,#f8fdf9 100%);border-color:#b9dfc6}
 .club-link-notice:hover{border-color:#81c69a}
-.club-link-icon{position:relative;z-index:1;width:42px;height:42px;display:grid;place-items:center;border-radius:13px;font-size:20px;line-height:1;background:rgba(255,255,255,.78);box-shadow:inset 0 0 0 1px rgba(31,41,55,.055),0 3px 9px rgba(31,41,55,.06)}
+.club-link-icon{position:relative;z-index:1;width:42px;height:42px;display:grid;place-items:center;border-radius:13px;font-size:20px;line-height:1;background:rgba(255,255,255,.78);box-shadow:inset 0 0 0 1px rgba(31,41,55,.055),0 3px 9px rgba(31,41,55,.06);overflow:hidden}
+.club-link-icon img{display:block;width:100%;height:100%;object-fit:cover}
 .club-link-chat .club-link-icon{background:#fee500}
 .club-link-notice .club-link-icon{background:#dff5e7}
 .club-link>span:nth-child(2){position:relative;z-index:1;min-width:0}
