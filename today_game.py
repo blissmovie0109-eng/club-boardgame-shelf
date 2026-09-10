@@ -19,15 +19,10 @@ app_module.Base.metadata.create_all(app_module.engine)
 
 # Existing installations already have the today_game table. Add the new image field
 # without requiring a manual database migration.
-try:
-    columns = {column["name"] for column in inspect(app_module.engine).get_columns("today_game")}
-    if "image_url" not in columns:
-        with app_module.engine.begin() as connection:
-            connection.execute(text("ALTER TABLE today_game ADD COLUMN image_url VARCHAR(1000) DEFAULT ''"))
-except Exception:
-    # The normal startup path will still surface a useful database error if the
-    # migration cannot be applied; do not prevent the rest of the app from loading.
-    pass
+columns = {column["name"] for column in inspect(app_module.engine).get_columns("today_game")}
+if "image_url" not in columns:
+    with app_module.engine.begin() as connection:
+        connection.execute(text("ALTER TABLE today_game ADD COLUMN image_url VARCHAR(1000) DEFAULT ''"))
 
 
 def _current(db):
@@ -68,7 +63,7 @@ def api_today_game():
             "image_url": item.image_url or "",
             "cafe_url": item.cafe_url or "",
             "updated_at": item.updated_at or "",
-            "enabled": bool(item.title and item.cafe_url),
+            "enabled": bool(item.title and item.image_url and item.cafe_url),
         }
     )
 
@@ -152,7 +147,7 @@ button{margin-top:20px;border:0;border-radius:13px;padding:14px 18px;background:
 </div>
 
 <label for='cafeUrl'>2. 네이버 카페 글 주소</label>
-<input id='cafeUrl' name='cafe_url' type='url' value='{{ item.cafe_url }}' placeholder='https://cafe.naver.com/... ' required>
+<input id='cafeUrl' name='cafe_url' type='url' value='{{ item.cafe_url }}' placeholder='https://cafe.naver.com/...' required>
 <div class='hint'>홈페이지의 큰 오늘의 게임 카드를 누르면 이 글로 이동합니다.</div>
 
 <button id='saveButton' type='submit' {% if not item.title or not item.image_url or not item.cafe_url %}disabled{% endif %}>오늘의 게임 저장</button>
