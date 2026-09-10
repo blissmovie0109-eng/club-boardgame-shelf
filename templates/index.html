@@ -25,6 +25,21 @@
   </div>
 </nav>
 
+<section id="todayGameFeature" class="today-game-feature hidden" aria-live="polite">
+  <div class="today-game-feature-inner">
+    <div class="today-game-feature-cover"><img data-today-game-image src="" alt="오늘의 게임 대표 이미지"></div>
+    <div class="today-game-feature-copy">
+      <span class="today-game-feature-kicker">TODAY'S GAME</span>
+      <h1 data-today-game-feature-title>오늘의 게임</h1>
+      <p>오늘 키리보에서 소개하는 게임입니다. 자세한 소개와 이야기는 네이버 카페에서 확인하세요.</p>
+      <div class="today-game-feature-actions">
+        <a data-today-game-feature-link href="#" target="_blank" rel="noopener noreferrer">네이버 카페에서 보기 <span>↗</span></a>
+        {% if session.get('admin') %}<a class="today-game-feature-admin" href="{{ url_for('admin_today_game') }}">오늘의 게임 관리</a>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
 <main class="collection-page">
   <section class="collection-toolbar">
     <div class="toolbar-left">
