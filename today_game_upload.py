@@ -5,6 +5,7 @@ import app as app_module
 import today_game as today_game_module
 
 app = app_module.app
+app.config["MAX_FORM_MEMORY_SIZE"] = 3_000_000
 MAX_IMAGE_CHARS = 2_000_000
 ALLOWED_IMAGE_PREFIXES = ("data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")
 
@@ -25,7 +26,8 @@ def _image_value(item):
             text("SELECT image_data FROM today_game WHERE id = :id"),
             {"id": item.id},
         ).mappings().first()
-    return (row.get("image_data") or "") if row else "" or (item.image_url or "")
+    image_data = (row.get("image_data") or "") if row else ""
+    return image_data or (item.image_url or "")
 
 
 def _safe_image_data(value):
@@ -40,7 +42,7 @@ def _safe_image_data(value):
 def api_today_game_v2():
     db = app_module.DBSession()
     item = _current(db)
-    image = _image_value(item) or (item.image_url or "")
+    image = _image_value(item)
     return jsonify({
         "title": item.title or "",
         "image_url": image,
@@ -54,7 +56,7 @@ def admin_today_game_v2():
     db = app_module.DBSession()
     item = _current(db)
     error = ""
-    existing_image = _image_value(item) or (item.image_url or "")
+    existing_image = _image_value(item)
 
     if request.method == "POST":
         title = app_module.clean_text(request.form.get("title"))[:250]
