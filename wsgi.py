@@ -68,6 +68,7 @@ def admin_backup_restore():
     flash(f"백업 복원 완료: 새로 추가 {added}개 · 백업값으로 갱신 {updated}개 · 건너뜀 {skipped}개. 현재 DB에만 있던 게임은 삭제하지 않았습니다.", "success"); return redirect(url_for("admin"))
 
 import today_game  # noqa: E402,F401
+import today_game_upload  # noqa: E402,F401
 
 # Homepage badge: show every stored game, including expansions.
 _original_index = app.view_functions.get("index")
